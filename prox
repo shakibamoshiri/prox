@@ -1200,6 +1200,7 @@ private::server_check(){
         IFS== read key value <<< "$pram"
         args[$key]="$value";
     done
+    declare -a server_ids=()
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     {
@@ -1363,7 +1364,22 @@ private::server_stat(){
     declare -r query=${args['query']:-offline}
     declare -r table=${args['table']:-true}
 
+    declare -i server_id=${args['sid']:--1}
+    declare -a server_ids=()
+
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+
+    if (( $server_id != -1 )); then
+        server_ids=($server_id)
+        # declare -r yq_server_id=$((server_id - 1))
+
+        ### NOTE
+        ### yq can match negative index for an array, e.g. -1 matches last index
+        if ! yq --exit-status ".servers[$(($server_id-1))].id" $pool_servers_file > /dev/null 2>&1; then
+            reply_msg res="error server-id $server_id not found" show=true \
+            return=$ERR_EXPR_FAILED
+        fi
+    fi
 
     if [[ $query == offline ]]; then
         for sid in "${server_ids[@]}"; do
@@ -1398,7 +1414,7 @@ private::server_stat(){
                 echo
             fi
         done
-    else
+    elif [[ $query == online ]]; then
         ### all server should be up
         private::server_check silent=true
 
@@ -1420,6 +1436,7 @@ private::server_stat(){
                 jq::table $table
             else
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
+                jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
                 jq::summary ${server_info[api_addr]} $count ${args[active]:-all} | \
                 jq::table $table
             fi
