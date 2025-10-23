@@ -215,35 +215,54 @@ jq::summary(){
     declare -ir count=${2}
     declare -r active=${3:-all}
 
+
     if (( $count == 0 )); then
         jq --null-input '{ user: "undefined", byte: "?", sessions: "?", server: "'$server'"}'
     else
         case $active in
             true )
-                jq '.users[] | select((.downlinkBytes + .downlinkBytes) != 0) | {
+                jq --exit-status '
+                    .server_loc as $location |
+                    .users[] |
+                    select((.downlinkBytes + .downlinkBytes) != 0) |
+                {
                     user: .username,
                     byte: (.downlinkBytes + .uplinkBytes), 
                     session: (.tcpSessions + .udpSessions), 
                     active: ((.downlinkBytes + .uplinkBytes) > 0), 
-                    server: "'$server'"
-                }'
+                    server: $location
+                }' || \
+                jq '
+                    .server_loc as $location |
+                {
+                    user: "?",
+                    byte: "?",
+                    session: "?",
+                    active: "?",
+                    server: $location
+                }' < $api_addr_json_file
             ;;
             false )
-                jq '.users[] | select((.downlinkBytes + .downlinkBytes) == 0) | {
+                jq '
+                    .server_loc as $location |
+                    .users[] |
+                    select((.downlinkBytes + .downlinkBytes) == 0) | {
                     user: .username,
                     byte: (.downlinkBytes + .uplinkBytes), 
                     session: (.tcpSessions + .udpSessions), 
                     active: ((.downlinkBytes + .uplinkBytes) > 0), 
-                    server: "'$server'"
+                    server: $location
                 }'
             ;;
             all )
-                jq '.users[] | {
+                jq '
+                    .server_loc as $location |
+                    .users[] | {
                     user: .username,
                     byte: (.downlinkBytes + .uplinkBytes), 
                     session: (.tcpSessions + .udpSessions), 
                     active: ((.downlinkBytes + .uplinkBytes) > 0), 
-                    server: "'$server'"
+                    server: $location
                 }'
             ;;
         esac
@@ -338,7 +357,7 @@ jq::user_update(){
     ' --slurpfile log $table_bytes/${user}.json | \
     sponge $table_bytes/${user}.json
 
-    echo 'done'
+    echo 'updated'
 }
 
 ################################################################################
@@ -371,8 +390,8 @@ private::user_create(){
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -A server_info=()
     rm -f $__tmp_path/${__fn_name}.txt
-    {
-        private::title ${args[silent]:-false} "id location username result"
+    # {
+        # private::title ${args[silent]:-false} "id location username result"
         for sid in "${server_ids[@]}"; do
             mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
             for line in "${props[@]}"; do
@@ -383,23 +402,35 @@ private::user_create(){
 
             private::debug $LINENO "nc -tzv ${server_info['api_addr']} ${server_info['api_port']}";
 
+                private::printf ${args[silent]:-false} "create $username"
+            if [[ $(private::server_test) == false ]]; then
+                private::print ${args[silent]:-false} "failure $ssm_api_addr\n"
+
+                if [[ ${args[force]:-false} == false ]]; then
+                    ### send notification to admins
+                    # echo "cd $PWD && ${0} telegram msg user=${agent_info[groupname]} aid=$agent_id msg=server=${server_info[location]}-fetch-failed" | at now +1 minute > /dev/null 2>&1
+
+                    reply_msg res="error, server=${server_info[location]} is down, force=false" return=$ERR_EXPR_FAILED show=true
+                fi
+            fi
+
             ### check if used already created or not
             if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
-                private::print ${args[silent]:-false} "$sid ${server_info[location]} $username exists\n"
+                private::print ${args[silent]:-false} "existed [${server_info[location]}]\n";
                 continue
             fi
 
             if [[ -f $table_users/$username.json ]]; then
                 old_password=$(jq '.uPSK' < $table_users/${username}.json)
                 curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": '${old_password}' }'
-                private::print ${args[silent]:-false} "$sid ${server_info[location]} $username added\n"
+                private::print ${args[silent]:-false} "readded [${server_info[location]}]\n";
             else
                 curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": "'${password}'" }'
-                private::print ${args[silent]:-false} "$sid ${server_info[location]} $username created\n"
+                private::print ${args[silent]:-false} "created [${server_info[location]}]\n";
             fi
         done 
-    } > $__tmp_path/${__fn_name}.txt 2>&1
-    column -t < $__tmp_path/${__fn_name}.txt
+    # } > $__tmp_path/${__fn_name}.txt 2>&1
+    # column -t < $__tmp_path/${__fn_name}.txt
 
     private::debug $LINENO "server_info[@]: ${server_info[@]}";
     private::debug $LINENO "db_info[users]: $table_users";
@@ -742,7 +773,7 @@ private::user_init(){
                 private::print ${args[silent]:-false} "init user=$user"
                 jq::user_init | \
                 sponge $table_bytes/${user}.json
-                echo "updated"
+                echo "init-ed"
 
                 ### notify
                 echo "cd $PWD && ${0} user notif user=$user aid=$agent_id msg=user-init " | at now +1 minute > /dev/null 2>&1
@@ -846,9 +877,16 @@ private::user_list(){
     private::debug $LINENO $FUNCNAME ;
     private::debug $LINENO "args: ${@}";
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    declare -r data_int=$(private::data_int bool)
+    if [[ $data_int == false ]]; then
+        reply_msg res='error, data integrity failure' \
+        show=true return=$ERR_EXPR_FAILED
+    fi
 
-    for sid in "${server_ids[0]}"; do
+    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    declare -r random_serve_id=$((RANDOM % ${#server_ids[@]}))
+
+    for sid in "${server_ids[$random_serve_id]}"; do
         mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
         declare -A server_info=()
         for line in "${props[@]}"; do
@@ -863,7 +901,8 @@ private::user_list(){
         done | jq::table true
     done
 
-    reply_msg res=success $@
+    reply_msg res="success, NOTE users query server-id: ${random_serve_id}" \
+    show=true newline=yes $@
 }
 private::user_archive(){
     declare -r fn_name=${FUNCNAME##*:};
@@ -1394,7 +1433,7 @@ private::server_stat(){
     reply_msg res=success ${@}
 }
 
-private::server_test() {
+private::server_test(){
     if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
         curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
         printf "true\n";
@@ -1805,6 +1844,49 @@ private::data_int(){
     esac
 }
 
+private::data_sync(){
+    declare -r fn_name=${FUNCNAME##*:};
+    private::debug $LINENO $FUNCNAME ;
+
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+
+    declare -r data_int=$(private::data_int bool)
+    if [[ $data_int == true ]]; then
+        reply_msg res='error, data integrity test passed' \
+        show=true return=$ERR_EXPR_FAILED
+    fi
+
+    declare -r source=${args['source']:-${args['src']:-${args['s']:-undefined}}}
+    if [[ $source == undefined ]]; then
+        reply_msg res='error source=<string> ?' show=true return=$ERR_EXPR_FAILED
+    fi
+
+    # declare -r target=${args['target']:-${args['tar']:-${args['t']:-undefined}}}
+    # if [[ $target == undefined ]]; then
+    #     reply_msg res='error target=<string> ?' show=true return=$ERR_EXPR_FAILED
+    # fi
+
+
+    declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
+    mapfile -t source_users < <(jq -r  'select(.server_loc=="'$source'") | .users[] | .username' $table_servers/*.json)
+    if (( ${#source_users[@]} ==  0 )); then
+        reply_msg res="error source=$source not found, try: server list" \
+            show=true return=$ERR_EXPR_FAILED
+    fi
+
+    for user in ${source_users[@]}; do
+        private::printf false "sync.$user"
+        private::user_create user=$user silent=true
+        private::print false "syncing\n"
+
+    done
+
+    reply_msg res=success ${@}
+}
 
 ################################################################################
 # db command
@@ -1820,11 +1902,12 @@ public::data(){
     declare -A agent_info=()
     declare -A pool_info=()
 
-    __action_list_order=(setup info test print);
+    __action_list_order=(setup info test sync print);
 
     __action_list[setup]='setup a db'
     __action_list[info]='info of a db';
     __action_list[test]='sync a db'
+    __action_list[sync]='sync a db'
     __action_list[print]='print';
 
     ### print available actions
@@ -1910,7 +1993,7 @@ public::data(){
         print )
             echo print
         ;;
-        setup | info | test )
+        setup | info | test | sync )
             private::${__fn_name}_${__action} "$@";
         ;;
         * )
