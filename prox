@@ -63,6 +63,34 @@ declare -r PRINTF_APP_TEST_OFFSET=30;
 
 declare -r ANSISHELL_HEADER="full AAA server for shadowsocks in sing-box";
 
+declare -rA main_cmds=(
+    [h]=help
+    [help]=help
+
+    [a]=app
+    [app]=app
+
+    [u]=user
+    [usr]=user
+    [user]=user
+
+    [s]=server
+    [srv]=server
+    [serv]=server
+    [server]=server
+
+    [ag]=agent
+    [agent]=agent
+
+    [d]=data
+    [db]=data
+    [data]=data
+
+    [t]=telegram
+    [tell]=telegram
+    [telegram]=telegram
+)
+
 declare SCRIPT_DEBUG_FLAG=false
 
 
@@ -1020,7 +1048,7 @@ public::user(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -1199,10 +1227,12 @@ private::server_list(){
         args[$key]="$value";
     done
 
+    ### jq solution
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
     jq  '{ id: .server_id, location: .server_loc, ssm_api: .ssm_api, users: (.users | length) }' $table_servers/*.json | \
     jq::table true
 
+    ### bash solution
     # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     # {
     #     echo id location address port
@@ -1398,7 +1428,7 @@ public::server(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -1600,7 +1630,7 @@ public::agent(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -1693,7 +1723,7 @@ public::agent(){
 ################################################################################
 # db
 ################################################################################
-private::db_setup(){
+private::data_setup(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
@@ -1713,7 +1743,7 @@ private::db_setup(){
     reply_msg res=success ${@}
 }
 
-private::db_info(){
+private::data_info(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
@@ -1729,7 +1759,7 @@ private::db_info(){
     reply_msg res=success ${@}
 }
 
-private::db_test(){
+private::data_test(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
@@ -1779,7 +1809,7 @@ private::data_int(){
 ################################################################################
 # db command
 ################################################################################
-public::db(){
+public::data(){
     declare -r __fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
@@ -1800,7 +1830,7 @@ public::db(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -2061,7 +2091,7 @@ public::telegram(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -2160,10 +2190,10 @@ private::app_test_cmd() {
     for cmd in ${cmds[@]}; do
         if which $cmd > /dev/null 2>&1; then
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$cmd~" "~" | tr ' ~' '. ';
-            printf "[ passed ]\n";
+            printf "passed\n";
         else
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$cmd~" "~" | tr ' ~' '. ';
-            printf "[ failed ] not found\n";
+            printf "failed, not found\n";
             case $cmd in
                 yq )
                     echo "Install $cmd from here: https://github.com/mikefarah/yq";
@@ -2173,12 +2203,16 @@ private::app_test_cmd() {
                     echo "Install $cmd from here: https://stedolan.github.io/jq/";
                     exit $ERR_EXPR_FAILED
                 ;;
-                printf | echo )
+                printf | echo | qrencode | rsync )
                     echo "Install $cmd with your package manager";
                     exit $ERR_EXPR_FAILED
                 ;;
+                nc )
+                    echo "Install netcat-openbsd with your package manager";
+                    exit $ERR_EXPR_FAILED
+                ;;
                 * )
-                    echo "no source found for  $cmd";
+                    echo "no source found for: $cmd";
                     exit $ERR_EXPR_FAILED
                 ;;
             esac
@@ -2193,10 +2227,10 @@ private::app_test_dir() {
     for dir in ${dirs[@]}; do
         if [[ -d $dir ]]; then
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$dir~" "~" | tr ' ~' '. ';
-            printf "[ passed ]\n";
+            printf "passed\n";
         else
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$dir~" "~" | tr ' ~' '. ';
-            printf "[ failed ] not found\n";
+            printf "failed, not found\n";
             case $dir in
                 * )
                     echo "please mkdir $dir";
@@ -2212,10 +2246,10 @@ private::app_test_file() {
     for ff in ${@}; do
         if [[ -f $ff ]]; then
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$ff~" "~" | tr ' ~' '. ';
-            printf "[ passed ]\n";
+            printf "passed\n";
         else
             printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "$ff~" "~" | tr ' ~' '. ';
-            printf "[ failed ] not found\n";
+            printf "failed, not found\n";
             case $ff in
                 server.sample.json )
                     echo "$ff is optional on AAA server";
@@ -2244,9 +2278,9 @@ private::app_test_server() {
         ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
         if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
             curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
-            printf "[ passed ]\n";
+            printf "passed\n";
         else
-            printf "[ failed ] ${ssm_api_addr}\n";
+            printf "failed, ${ssm_api_addr}\n";
             exit $ERR_EXPR_FAILED
         fi
     done
@@ -2292,11 +2326,11 @@ private::app_init(){
         args[$key]="$value";
     done
 
-    private::title false "user app  tests:"
+    private::info false "user app tests\n\n"
     private::app_test show=false
 
     private::title false "\nsetup database:"
-    private::db_setup
+    private::data_setup
 
     private::title false "\ncreate a user (user=prox):"
     private::user_create user=prox
@@ -2374,7 +2408,7 @@ public::app(){
     ### print available actions
     if [[ -z ${1:-} ]]; then
         for value in ${__action_list_order[@]}; do
-            printf '%-10s %s\n' $value "${__action_list[$value]}"
+            printf "%-${PRINTF_HELP_OFFSET}s %s\n" $value "${__action_list[$value]}"
         done
         exit $EXIT_SUCCESS;
     else
@@ -2513,7 +2547,7 @@ public::help(){
 
     printf "\n\nusage:\n";
     printf "$CLI_NAME [--options]\n";
-    printf "$CLI_NAME [--options] command <subcommand> arg=<arg>\n";
+    printf "$CLI_NAME [--options] command <subcommand> [arg=<arg>, ...]\n";
 
     printf "\noptions:\n";
     printf "%-${PRINTF_HELP_OFFSET}s %s\n" '-h  | --help' 'show this help menu';
@@ -2523,12 +2557,12 @@ public::help(){
     printf "%-${PRINTF_HELP_OFFSET}s %s\n" '-t  | --trap' 'enable trap for errors';
 
     printf "\ncommands:\n";
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'app' 'manage setup and dependencies';
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'server' 'manage servers';
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'agent' 'manage agents';
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'user' 'manage users';
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'db' 'manage databases';
-    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'telegram' 'manage notification (telegram) ';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'app    [a]' 'manage the app';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'server [s]' 'manage servers';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'agent  [ag]' 'manage agents';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'user   [u]' 'manage users';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'data   [d]' 'manage databases';
+    printf "%-${PRINTF_HELP_OFFSET}s %s\n" 'tell   [t]' 'manage notifications (telegram) ';
 
     exit ${1:-1};
 }
@@ -2562,7 +2596,13 @@ private::parse_options(){
 
     if (( ${#} != 0 )); then
         case ${1} in
-            help | app | user | server | agent | db | telegram )
+            h | help | \
+            a | app | \
+            u | usr | user  | \
+            s | srv | serv | server | \
+            ag | agent | \
+            d | db | data | \
+            t | tell | telegram )
                 private::debug $LINENO continue-main: "'$@'";
                 private::main "$@";
             ;;
@@ -2583,10 +2623,16 @@ private::main(){
     fi
 
     case ${1} in
-        help | app | user | server | agent | db | telegram )
+        h | help | \
+        a | app | \
+        u | usr | user  | \
+        s | srv | serv | server | \
+        ag | agent | \
+        d | db | data | \
+        t | tell | telegram )
             private::debug $LINENO 'command:' "'${1}'";
             private::debug $LINENO 'command-options:' "'${@:2}'";
-            public::${1} "${@:2}";
+            public::${main_cmds[$1]} "${@:2}";
         ;;
         * )
             private::parse_options "$@";
