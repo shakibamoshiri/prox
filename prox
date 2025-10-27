@@ -525,6 +525,7 @@ private::user_delete(){
 
     declare -r username=${args['user']:-}
     declare -r force=${args['force']:-false}
+    declare -r select=${args['select']:-undefined}
 
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     
@@ -534,9 +535,9 @@ private::user_delete(){
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -A server_info=()
-    rm -f $__tmp_path/${fn_name}.txt
-    {
-        private::title ${args[silent]:-false} 'id location username result'
+    # rm -f $__tmp_path/${fn_name}.txt
+    # {
+        # private::title ${args[silent]:-false} 'id location username result'
         # echo 'location username result'
         for sid in "${server_ids[@]}"; do
             mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
@@ -549,27 +550,45 @@ private::user_delete(){
             private::debug $LINENO "nc -tzv ${server_info['api_addr']} ${server_info['api_port']}";
 
             if [[ $username == all ]] && [[ $force == true ]]; then
-                mapfile -t all_users < <(ls -1 $table_users | sed 's/.json//g')
+                declare all_users=()
+                case $select in
+                    local )
+                        ### all local users
+                        mapfile -t all_users < <(ls -1 $table_users | sed 's/.json//g')
+                    ;;
+                    remote )
+                        ### all remote users
+                        mapfile -t all_users < <(curl --silent -X GET --url http://${ssm_api_addr}/server/v1/users | jq -r '.users[].username' | sort)
+                    ;;
+                    * )
+                        reply_msg res="error, select=<local|remote> ?" show=true \
+                            return $ERR_EXPR_FAILED
+                            exit $ERR_EXPR_FAILED
+                    ;;
+                esac
+
                 for user in ${all_users[@]}; do
+                    private::printf ${args[silent]:-false} "delete $user"
                     curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$user
-                    private::print ${args[silent]:-false} "$sid ${server_info[location]} $user deleted"
+                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]\n"
                 done
             else
+                private::printf ${args[silent]:-false} "delete $username"
                 ### check if used already created or not
                 if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
                     curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$username 
-                    private::print ${args[silent]:-false} "$sid ${server_info[location]} $username deleted\n"
+                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]\n"
                 else
-                    private::print ${args[silent]:-false} "$sid ${server_info[location]} $username not-found\n"
+                    private::print ${args[silent]:-false} "noexist [${server_info[location]}]\n"
                 fi
             fi
         done 
-    } > $__tmp_path/${fn_name}.txt 2>&1
-    column -t < $__tmp_path/${fn_name}.txt
+    # } > $__tmp_path/${fn_name}.txt 2>&1
+    # column -t < $__tmp_path/${fn_name}.txt
 
     private::debug $LINENO "server_info[@]: ${server_info[@]}";
 
-    reply_msg res=success ${@}
+    reply_msg res=success show=${args[silent]:+true} ${@}
 }
 
 private::user_config(){
