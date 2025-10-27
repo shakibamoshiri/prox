@@ -414,6 +414,7 @@ private::user_create(){
 
     declare -r password=$(openssl rand -base64 16)
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
+    declare -r user_data_file=${table_users}/${username}.json
     declare old_password=""
 
     ### the agent path be created
@@ -422,9 +423,14 @@ private::user_create(){
             return=$ERR_EXPR_FAILED show=true
     fi
 
+    if [[ -f $user_data_file ]]; then
+        reply_msg res="error, user: $username already created" \
+            return=$ERR_EXPR_FAILED show=true
+    fi
+
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -A server_info=()
-    rm -f $__tmp_path/${__fn_name}.txt
+    # rm -f $__tmp_path/${__fn_name}.txt
     # {
         # private::title ${args[silent]:-false} "id location username result"
         for sid in "${server_ids[@]}"; do
@@ -437,7 +443,7 @@ private::user_create(){
 
             private::debug $LINENO "nc -tzv ${server_info['api_addr']} ${server_info['api_port']}";
 
-                private::printf ${args[silent]:-false} "create $username"
+            private::printf ${args[silent]:-false} "create $username"
             if [[ $(private::server_test) == false ]]; then
                 private::print ${args[silent]:-false} "failure $ssm_api_addr\n"
 
@@ -455,8 +461,8 @@ private::user_create(){
                 continue
             fi
 
-            if [[ -f $table_users/$username.json ]]; then
-                old_password=$(jq '.uPSK' < $table_users/${username}.json)
+            if [[ -f $user_data_file ]]; then
+                old_password=$(jq '.uPSK' < $user_data_file)
                 curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": '${old_password}' }'
                 private::print ${args[silent]:-false} "readded [${server_info[location]}]\n";
             else
@@ -503,7 +509,7 @@ private::user_create(){
         .gig=${pool_info[gig]} |
         .page=\"$user_profile_page\/\" |
         .profile=\"$profile_random\" | del(.downlinkBytes,.uplinkBytes,.downlinkPackets,.uplinkPackets,.tcpSessions,.udpSessions)" | \
-            sponge $table_users/$username.json
+            sponge $user_data_file
 
     private::user_config aid=$agent_id user=$username method=local show=false $@
     private::user_config aid=$agent_id user=$username method=link show=false $@
