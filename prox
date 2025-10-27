@@ -316,20 +316,6 @@ jq::user_init(){
             limit: false
         }
     }' --slurpfile config $table_users/${user}.json
-
-    # declare -r dash_path=${config[web_root]}
-    # declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
-    # declare -r user_dash_index_html=$user_dash_path/index.html
-    # declare -r user_qr_png=$user_dash_path/${user}.png
-
-    # ### remote the link
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-by-admin" $user_dash_index_html
-    #
-    # ### remote qr png file and img tag
-    # if [[ -f $user_qr_png ]]; then
-    #     rm -f $user_qr_png
-    #     perl -i -s -lpe '!/src="$arg"/ && print' -- -arg="${user}.png" $user_dash_index_html
-    # fi
 }
 
 jq::user_update(){
@@ -372,30 +358,36 @@ jq::user_update(){
     sponge $table_bytes/${user}.json
     echo 'updated'
 
-    # declare -r dash_path=${config[web_root]}
-    # declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
-    # declare -r user_dash_index_html=$user_dash_path/index.html
-    # declare -r user_qr_png=$user_dash_path/${user}.png
+    ### generate a static page for it
+    declare -A profile=()
+    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
+    for line in "${tmp[@]}"; do
+        IFS=\ =\  read key value <<< "$line"
+        profile[$key]="$value";
+    done
+
+    declare -r dash_path=${profile[web_root]}
+    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$user
+    declare -r user_profile_index_html=$user_profile_path/index.html
 
     declare -r bytes_used=$(jq '.bytes.used' < $table_bytes/${user}.json)
     declare -r seconds_used=$(jq '.seconds.used' < $table_bytes/${user}.json)
     declare -r sessions=$(jq '.sessions' < $table_bytes/${user}.json)
 
     ### update user data on index.html
-    perl -i -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_dash_index_html
+    perl -i -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_profile_index_html
     ### day
-    perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_dash_index_html
+    perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_profile_index_html
     ### sessions
-    perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_dash_index_html
+    perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_profile_index_html
 
     # ### remove the link, should we ?
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-ask-admin-to-update" $user_dash_index_html
+    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-ask-admin-to-update" $user_profile_index_html
     #
     # ### remote qr png file
     # if [[ -f $user_qr_png ]]; then
     #     rm -f $user_qr_png
     # fi
-
 }
 
 ################################################################################
@@ -479,28 +471,28 @@ private::user_create(){
     private::debug $LINENO "db_info[users]: $table_users";
 
     ### generate a static page for it
-    declare -A config=()
-    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .config' $pool_servers_file --output-format props)
+    declare -A profile=()
+    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
     for line in "${tmp[@]}"; do
         IFS=\ =\  read key value <<< "$line"
-        config[$key]="$value";
+        profile[$key]="$value";
     done
 
-    declare -r dash_path=${config[web_root]}
-    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$username
-    declare -r user_dash_index_html=$user_dash_path/index.html
+    declare -r dash_path=${profile[web_root]}
+    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$username
+    declare -r user_profile_index_html=$user_profile_path/index.html
 
-    mkdir -p $user_dash_path
-    rsync -az $dash_path/sample.html $user_dash_index_html
+    mkdir -p $user_profile_path
+    rsync -az $dash_path/sample.html $user_profile_index_html
 
-    declare -r user_remote_page=${config[link]}/${agent_info[groupname]}/$username
+    declare -r user_profile_page=${profile[link]}/${agent_info[groupname]}/$username
     declare -r user_qr_png=${profile_random}.png
 
     ### qr image
-    perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_dash_index_html
+    perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_profile_index_html
     ### remote link
-    # perl -i -s  -lpe 's/(?<=id="user-remote-link">).*?(?=<\/a>)/$arg/' -- -arg="$user_remote_page/profile" $user_dash_index_html
-    perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="$user_remote_page/$profile_random" $user_dash_index_html
+    # perl -i -s  -lpe 's/(?<=id="user-remote-link">).*?(?=<\/a>)/$arg/' -- -arg="$user_profile_page/profile" $user_profile_index_html
+    perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="$user_profile_page/$profile_random" $user_profile_index_html
 
     ### save the new user
     curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | \
@@ -509,7 +501,7 @@ private::user_create(){
         .ctime=(now|todate) |
         .day=${pool_info[day]} |
         .gig=${pool_info[gig]} |
-        .page=\"$user_remote_page\/\" |
+        .page=\"$user_profile_page\/\" |
         .profile=\"$profile_random\" | del(.downlinkBytes,.uplinkBytes,.downlinkPackets,.uplinkPackets,.tcpSessions,.udpSessions)" | \
             sponge $table_users/$username.json
 
@@ -517,7 +509,7 @@ private::user_create(){
     private::user_config aid=$agent_id user=$username method=link show=false $@
     private::user_config aid=$agent_id user=$username method=link type=qr show=false $@
 
-    reply_msg res="page: <code>$user_remote_page/</code>" show=true \
+    reply_msg res="page: <code>$user_profile_page/</code>" show=true \
     newline=true
 }
 
@@ -651,38 +643,41 @@ private::user_config(){
         ' < $client_sample_file > $user_config_file
     fi
 
-    declare -A config=()
-    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .config' $pool_servers_file --output-format props)
+    declare -A profile=()
+    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
     for line in "${tmp[@]}"; do
         IFS=\ =\  read key value <<< "$line"
-        config[$key]="$value";
+        profile[$key]="$value";
     done
 
-    declare -r user_remote_page=${config[link]}/${agent_info[groupname]}/$username
-    declare -r user_profile_path=${config[web_root]}/${agent_info[groupname]}/$username
+    declare -r dash_path=${profile[web_root]}
+    declare -r dash_link=${profile[link]}
+
+    declare -r user_profile_page=${dash_link}/${agent_info[groupname]}/$username
+    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$username
     declare -r user_profile_file=$user_profile_path/$profile_random
 
-    declare -r dash_path=${config[web_root]}
-    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$username
     declare -r user_qr_png=${profile_random}.png
-    declare -r user_url="${user_remote_page}/$profile_random#${profile_name:-$username}"
+    declare -r user_url="${user_profile_page}/$profile_random#${profile_name:-$username}"
 
     if [[ $type == json ]]; then
         case $method in
             link )
                 rsync -az $user_config_file $user_profile_file
-                reply_msg res="link: <code>$user_remote_page/$profile_random</code>" \
+                reply_msg res="link: <code>$user_profile_page/$profile_random</code>" \
                 show=true $@
             ;;
 
             file )
-                private::telegram_doc user=$username file=$user_config_file
-                reply_msg res="upload: $user_config_file" \
+                # private::telegram_doc user=$username file=$user_config_file
+                echo "cd $PWD && ${0} tell doc user=$username aid=$agent_id file=$user_config_file" | at now +1 minute > /dev/null 2>&1
+
+                reply_msg res="file: <code>${username}.json</code> is uploading ..." \
                 show=true $@
             ;;
 
             local )
-                reply_msg res="json: $user_config_file" \
+                reply_msg res="local: $user_config_file" \
                 show=true $@
             ;;
 
@@ -698,14 +693,21 @@ private::user_config(){
             link )
                 rsync -az $user_config_file $user_profile_file
                 echo "sing-box://import-remote-profile?url=$user_url" | \
-                    qrencode -s 10 -t PNG -o ${user_dash_path}/$user_qr_png
+                    qrencode -s 10 -t PNG -o ${user_profile_path}/$user_qr_png
+
+                reply_msg res="link: <code>${user_profile_page}/$user_qr_png</code>" \
+                show=true $@
 
             ;;
             file )
-                echo "sing-box://import-remote-profile?url=${config[link]}/$username#$username" | \
-                    qrencode -s 10 -t PNG -o ${user_config_file%%.json}.png
+                echo "sing-box://import-remote-profile?url=$user_url" | \
+                    qrencode -s 10 -t PNG -o ${user_config_file%.json}.png
                 
-                private::telegram_doc user=$username file=${user_config_file%%.json}.png
+                # private::telegram_doc user=$username file=${table_configs}/${username}.png
+                echo "cd $PWD && ${0} tell doc user=$username aid=$agent_id file=${user_config_file%.json}.png" | at now +1 minute > /dev/null 2>&1
+
+                reply_msg res="file: <code>${username}.png</code> is uploading ..." \
+                show=true $@
             ;;
             * )
                 reply_msg res="unknown method: $method, type: ${type}" show=true \
