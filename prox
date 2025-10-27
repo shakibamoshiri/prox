@@ -317,18 +317,18 @@ jq::user_init(){
         }
     }' --slurpfile config $table_users/${user}.json
 
-    declare -r dash_path=dash
-    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
-    declare -r user_dash_file=$user_dash_path/index.html
-    declare -r user_qr_png=$user_dash_path/${user}.png
+    # declare -r dash_path=${config[web_root]}
+    # declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
+    # declare -r user_dash_index_html=$user_dash_path/index.html
+    # declare -r user_qr_png=$user_dash_path/${user}.png
 
     # ### remote the link
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-by-admin" $user_dash_file
+    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-by-admin" $user_dash_index_html
     #
     # ### remote qr png file and img tag
     # if [[ -f $user_qr_png ]]; then
     #     rm -f $user_qr_png
-    #     perl -i -s -lpe '!/src="$arg"/ && print' -- -arg="${user}.png" $user_dash_file
+    #     perl -i -s -lpe '!/src="$arg"/ && print' -- -arg="${user}.png" $user_dash_index_html
     # fi
 }
 
@@ -372,24 +372,24 @@ jq::user_update(){
     sponge $table_bytes/${user}.json
     echo 'updated'
 
-    declare -r dash_path=dash
-    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
-    declare -r user_dash_file=$user_dash_path/index.html
-    declare -r user_qr_png=$user_dash_path/${user}.png
+    # declare -r dash_path=${config[web_root]}
+    # declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
+    # declare -r user_dash_index_html=$user_dash_path/index.html
+    # declare -r user_qr_png=$user_dash_path/${user}.png
 
     declare -r bytes_used=$(jq '.bytes.used' < $table_bytes/${user}.json)
     declare -r seconds_used=$(jq '.seconds.used' < $table_bytes/${user}.json)
     declare -r sessions=$(jq '.sessions' < $table_bytes/${user}.json)
 
-    ### gigabyte
-    perl -i  -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_dash_file
+    ### update user data on index.html
+    perl -i -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_dash_index_html
     ### day
-    perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_dash_file
+    perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_dash_index_html
     ### sessions
-    perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_dash_file
+    perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_dash_index_html
 
     # ### remove the link, should we ?
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-ask-admin-to-update" $user_dash_file
+    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-ask-admin-to-update" $user_dash_index_html
     #
     # ### remote qr png file
     # if [[ -f $user_qr_png ]]; then
@@ -418,7 +418,7 @@ private::user_create(){
     declare -r username=${args['user']:-$username_random}
 
     declare -r user_realname=${args['rname']:-${args['rn']:-undefined}}
-    declare -r profile_name=${args['pname']:-${args['pn']:-prox}}
+    declare -r profile_name=${args['pname']:-${args['pn']:-}}
 
     declare -r password=$(openssl rand -base64 16)
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
@@ -488,24 +488,19 @@ private::user_create(){
 
     declare -r dash_path=${config[web_root]}
     declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$username
-    declare -r user_dash_file=$user_dash_path/index.html
+    declare -r user_dash_index_html=$user_dash_path/index.html
 
     mkdir -p $user_dash_path
-    rsync -az $dash_path/sample.html $user_dash_file
+    rsync -az $dash_path/sample.html $user_dash_index_html
 
     declare -r user_remote_page=${config[link]}/${agent_info[groupname]}/$username
-    declare -r user_qr_png=${username}.png
-    declare -r user_url="${user_remote_page}/$profile_random#$profile_name"
-
-    echo "sing-box://import-remote-profile?url=$user_url" | \
-        qrencode -s 10 -t PNG -o ${user_dash_path}/$user_qr_png
+    declare -r user_qr_png=${profile_random}.png
 
     ### qr image
-    perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_dash_file
+    perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_dash_index_html
     ### remote link
-    # perl -i -s  -lpe 's/(?<=id="user-remote-link">).*?(?=<\/a>)/$arg/' -- -arg="$user_remote_page/profile" $user_dash_file
-    perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="$user_remote_page/$profile_random" $user_dash_file
-
+    # perl -i -s  -lpe 's/(?<=id="user-remote-link">).*?(?=<\/a>)/$arg/' -- -arg="$user_remote_page/profile" $user_dash_index_html
+    perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="$user_remote_page/$profile_random" $user_dash_index_html
 
     ### save the new user
     curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | \
@@ -520,6 +515,7 @@ private::user_create(){
 
     private::user_config aid=$agent_id user=$username method=local show=false $@
     private::user_config aid=$agent_id user=$username method=link show=false $@
+    private::user_config aid=$agent_id user=$username method=link type=qr show=false $@
 
     reply_msg res="page: <code>$user_remote_page/</code>" show=true \
     newline=true
@@ -596,6 +592,7 @@ private::user_config(){
 
     declare -r username=${args['user']:-}
     declare -r force=${args['force']:-false}
+    declare -r profile_name=${args['pname']:-${args['pn']:-}}
 
     declare -r type=${args['type']:-json}
     declare -r method=${args['method']:-${args['met']:-${args['m']:-link}}}
@@ -665,6 +662,11 @@ private::user_config(){
     declare -r user_profile_path=${config[web_root]}/${agent_info[groupname]}/$username
     declare -r user_profile_file=$user_profile_path/$profile_random
 
+    declare -r dash_path=${config[web_root]}
+    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$username
+    declare -r user_qr_png=${profile_random}.png
+    declare -r user_url="${user_remote_page}/$profile_random#${profile_name:-$username}"
+
     if [[ $type == json ]]; then
         case $method in
             link )
@@ -694,15 +696,13 @@ private::user_config(){
     if [[ $type == qr ]]; then
         case $method in
             link )
-                rsync -az $user_config_file ${config[web_root]}/${username}
+                rsync -az $user_config_file $user_profile_file
+                echo "sing-box://import-remote-profile?url=$user_url" | \
+                    qrencode -s 10 -t PNG -o ${user_dash_path}/$user_qr_png
 
-                echo "sing-box://import-remote-profile?url=${config[link]}/$username#$profile_name" | \
-                    qrencode -s 10 -t PNG -o ${config[web_root]}/${username}.png
-
-                echo link-qr: "${config[link]}/${username}.png"
             ;;
             file )
-                echo "sing-box://import-remote-profile?url=${config[link]}/$username#$profile_name" | \
+                echo "sing-box://import-remote-profile?url=${config[link]}/$username#$username" | \
                     qrencode -s 10 -t PNG -o ${user_config_file%%.json}.png
                 
                 private::telegram_doc user=$username file=${user_config_file%%.json}.png
