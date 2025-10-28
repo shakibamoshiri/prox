@@ -18,6 +18,7 @@ private::strict_mode(){
     set -e # exit immediately on errors
     set -u # exit on not assigned variables
     set -o pipefail # exit on pipe failure
+    shopt -s extglob
 }
 private::strict_mode;
 
@@ -294,25 +295,32 @@ jq::user_stat(){
 }
 
 jq::user_init(){
+    declare -A args=();
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+    declare -r user=${args[user]:-undefined};
+
     jq --null-input '
         ($config[0].day * 24 * 60 * 60) as $duration |
         ($config[0].gig * 1024 * 1024 * 1024) as $base |
 
     {
         user: $config[0].username,
-        sessions: 1,
+        sessions: 0,
         ctime: (now|floor),
         atime: 0,
         etime: ((now|floor)+$duration),
         bytes: {
             base: $base,
-            used: 1,
-            pday: 1,
+            used: 0,
+            pday: 0,
             limit: false
         },
         seconds: {
             base: $duration,
-            used: 1,
+            used: 0,
             limit: false
         }
     }' --slurpfile config $table_users/${user}.json
@@ -322,8 +330,16 @@ jq::user_update(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
+    declare -A args=();
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+    declare -r delink=${args[delink]:-false};
+    declare -r user_bytes_file=${table_bytes}/${user}.json
+
     declare -i last_bytes=$(private::user_bytes user=$user)
-    declare -i user_bytes=$(jq '.bytes.used' < $table_bytes/${user}.json)
+    declare -i user_bytes=$(jq '.bytes.used' < $user_bytes_file)
     if (( last_bytes == user_bytes )); then
         echo ignored
         return 0
@@ -354,8 +370,8 @@ jq::user_update(){
             limit: ($second_used > $log.seconds.base)
         }
      }
-    ' --slurpfile log $table_bytes/${user}.json | \
-    sponge $table_bytes/${user}.json
+    ' --slurpfile log $user_bytes_file | \
+    sponge $user_bytes_file
     echo 'updated'
 
     ### generate a static page for it
@@ -369,25 +385,30 @@ jq::user_update(){
     declare -r dash_path=${profile[web_root]}
     declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$user
     declare -r user_profile_index_html=$user_profile_path/index.html
+    declare -r user_fetch_file=$user_profile_path/${user}.json
 
-    declare -r bytes_used=$(jq '.bytes.used' < $table_bytes/${user}.json)
-    declare -r seconds_used=$(jq '.seconds.used' < $table_bytes/${user}.json)
-    declare -r sessions=$(jq '.sessions' < $table_bytes/${user}.json)
+    # declare -r bytes_used=$(jq '.bytes.used' < $user_bytes_file)
+    # declare -r seconds_used=$(jq '.seconds.used' < $user_bytes_file)
+    # declare -r sessions=$(jq '.sessions' < $user_bytes_file)
 
-    ### update user data on index.html
-    perl -i -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_profile_index_html
-    ### day
-    perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_profile_index_html
-    ### sessions
-    perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_profile_index_html
+    # ### update user data on index.html
+    # perl -i -s -lpe 's/(?<=id="user-bytes">)\d*(?=<\/span>)/$arg/' -- -arg=$bytes_used $user_profile_index_html
+    # ### day
+    # perl -i -s -lpe 's/(?<=id="user-seconds">)\d*(?=<\/span>)/$arg/' -- -arg=$seconds_used $user_profile_index_html
+    # ### sessions
+    # perl -i -s -lpe 's/(?<=id="user-sessions">)\d*(?=<\/span>)/$arg/' -- -arg=$sessions $user_profile_index_html
 
-    # ### remove the link, should we ?
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-ask-admin-to-update" $user_profile_index_html
-    #
-    # ### remote qr png file
-    # if [[ -f $user_qr_png ]]; then
-    #     rm -f $user_qr_png
-    # fi
+    # if ! [[ -f $user_fetch_file ]]; then
+    if jq --exit-status '.bytes.used == 0' < $user_fetch_file > /dev/null 2>&1; then
+        if [[ $delink == true ]]; then
+            ### remove the link, should we ?
+            perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-by-admin" $user_profile_index_html
+            perl -i -s -lne '!/$arg/ && print' -- -arg='img src=' $user_profile_index_html
+            rm -f ${user_profile_path}/!(index.html)
+        fi
+    fi
+
+    rsync -az $user_bytes_file $user_profile_path/
 }
 
 ################################################################################
@@ -408,6 +429,8 @@ private::user_create(){
     declare -r username_random=$(openssl rand -hex 5)
     declare -r profile_random=$(openssl rand -hex 5)
     declare -r username=${args['user']:-$username_random}
+    declare -r user_gig=${args[gig]:-${pool_info[gig]}}
+    declare -r user_day=${args[day]:-${pool_info[day]}}
 
     declare -r user_realname=${args['rname']:-${args['rn']:-undefined}}
     declare -r profile_name=${args['pname']:-${args['pn']:-}}
@@ -489,7 +512,7 @@ private::user_create(){
     declare -r user_profile_index_html=$user_profile_path/index.html
 
     mkdir -p $user_profile_path
-    rsync -az $dash_path/sample.html $user_profile_index_html
+    rsync -az $dash_path/${agent_info[groupname]}.html $user_profile_index_html
 
     declare -r user_profile_page=${profile[link]}/${agent_info[groupname]}/$username
     declare -r user_qr_png=${profile_random}.png
@@ -505,8 +528,8 @@ private::user_create(){
     jq --exit-status "
         .realname=\"$user_realname\" |
         .ctime=(now|todate) |
-        .day=${pool_info[day]} |
-        .gig=${pool_info[gig]} |
+        .day=$user_day |
+        .gig=$user_gig |
         .page=\"$user_profile_page\/\" |
         .profile=\"$profile_random\" | del(.downlinkBytes,.uplinkBytes,.downlinkPackets,.uplinkPackets,.tcpSessions,.udpSessions)" | \
             sponge $user_data_file
@@ -514,6 +537,8 @@ private::user_create(){
     private::user_config aid=$agent_id user=$username method=local show=false $@
     private::user_config aid=$agent_id user=$username method=link show=false $@
     private::user_config aid=$agent_id user=$username method=link type=qr show=false $@
+
+    jq::user_init user=$username | sponge $user_profile_path/${username}.json
 
     reply_msg res="page: <code>$user_profile_page/</code>" show=true \
     newline=true
@@ -890,10 +915,10 @@ private::user_init(){
         else
             if [ -f $table_bytes/${user}.json ]; then
                 private::printf ${args[silent]:-false} "update user=$user"
-                jq::user_update
+                jq::user_update $@
             else
                 private::printf ${args[silent]:-false} "init user=$user"
-                jq::user_init | \
+                jq::user_init user=$user | \
                 sponge $table_bytes/${user}.json
                 echo "init-ed"
 

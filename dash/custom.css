@@ -71,6 +71,9 @@ div.soma {
     /*top: 57%;*/
     color: #fff;
 }
+#user-atime {
+    padding-top: 50px;
+}
 .carousel-y input:nth-of-type(1):checked ~ .carousel-y-indicator label:nth-of-type(1)::after {
     color: #afaf00;
 }
