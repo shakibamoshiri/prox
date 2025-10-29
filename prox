@@ -160,9 +160,9 @@ private::print() {
     declare -r silent=${1:-false}
 
     if [[ ${silent} == false ]]; then
-        printf "${*:2}"; 
+        printf "${*:2}\n";
     else
-        printf "${*:2}" >> $__log_path/silent.txt 2>&1
+        printf "${*:2}\n" >> $__log_path/silent.txt 2>&1
     fi
 }
 
@@ -468,7 +468,7 @@ private::user_create(){
 
             private::printf ${args[silent]:-false} "create $username"
             if [[ $(private::server_test) == false ]]; then
-                private::print ${args[silent]:-false} "failure $ssm_api_addr\n"
+                private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
                 if [[ ${args[force]:-false} == false ]]; then
                     ### send notification to admins
@@ -480,17 +480,17 @@ private::user_create(){
 
             ### check if used already created or not
             if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
-                private::print ${args[silent]:-false} "existed [${server_info[location]}]\n";
+                private::print ${args[silent]:-false} "existed [${server_info[location]}]";
                 continue
             fi
 
             if [[ -f $user_data_file ]]; then
                 old_password=$(jq '.uPSK' < $user_data_file)
                 curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": '${old_password}' }'
-                private::print ${args[silent]:-false} "readded [${server_info[location]}]\n";
+                private::print ${args[silent]:-false} "readded [${server_info[location]}]";
             else
                 curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": "'${password}'" }'
-                private::print ${args[silent]:-false} "created [${server_info[location]}]\n";
+                private::print ${args[silent]:-false} "created [${server_info[location]}]";
             fi
         done 
     # } > $__tmp_path/${__fn_name}.txt 2>&1
@@ -601,16 +601,16 @@ private::user_delete(){
                 for user in ${all_users[@]}; do
                     private::printf ${args[silent]:-false} "delete $user"
                     curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$user
-                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]\n"
+                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]"
                 done
             else
                 private::printf ${args[silent]:-false} "delete $username"
                 ### check if used already created or not
                 if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
                     curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$username 
-                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]\n"
+                    private::print ${args[silent]:-false} "deleted [${server_info[location]}]"
                 else
-                    private::print ${args[silent]:-false} "noexist [${server_info[location]}]\n"
+                    private::print ${args[silent]:-false} "noexist [${server_info[location]}]"
                 fi
             fi
         done 
@@ -1195,7 +1195,7 @@ private::user_limit(){
                 continue
             fi
 
-            private::print ${args[silent]:-false} "ignored\n"
+            private::print ${args[silent]:-false} "ignored"
         fi
 
     done
@@ -1365,11 +1365,11 @@ private::server_check(){
 
             declare fetched=$(private::server_test)
             if [[ $(private::server_test) == true ]]; then
-                private::print ${args[silent]:-false} "checked\n"
+                private::print ${args[silent]:-false} "checked"
             fi
 
             if [[ $(private::server_test) == false ]]; then
-                private::print ${args[silent]:-false} "failure $ssm_api_addr\n"
+                private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
                 if [[ ${args[force]:-false} == false ]]; then
                     ### send notification to admins
@@ -1385,9 +1385,9 @@ private::server_check(){
             # # private::print ${args[silent]:-false} "${server_info[id]} ${server_info[location]} ${server_info[api_addr]} "
             # if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
             #     curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
-            #     private::print ${args[silent]:-false} "checked\n"
+            #     private::print ${args[silent]:-false} "checked"
             # else
-            #     private::print ${args[silent]:-false} "failure: ${ssm_api_addr}, admin be will notified ...\n"
+            #     private::print ${args[silent]:-false} "failure: ${ssm_api_addr}, admin be will notified ..."
 
 
             #     if [[ ${args[force]:-false} == false ]]; then
@@ -1477,11 +1477,11 @@ private::server_fetch(){
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
                     jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
                     sponge $api_addr_json_file 2>&1
-                private::print ${args[silent]:-false} "fetched\n"
+                private::print ${args[silent]:-false} "fetched"
             fi
 
             if [[ $(private::server_test) == false ]]; then
-                private::print ${args[silent]:-false} "failure $ssm_api_addr\n"
+                private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
                 if [[ ${args[force]:-false} == false ]]; then
                     ### send notification to admins
@@ -2045,7 +2045,7 @@ private::data_sync(){
     for user in ${source_users[@]}; do
         private::printf false "sync.$user"
         private::user_create user=$user silent=true
-        private::print false "syncing\n"
+        private::print false "syncing"
 
     done
 
