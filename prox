@@ -432,13 +432,18 @@ private::user_create(){
     declare -r user_gig=${args[gig]:-${pool_info[gig]}}
     declare -r user_day=${args[day]:-${pool_info[day]}}
 
-    declare -r user_realname=${args['rname']:-${args['rn']:-undefined}}
+    declare -r user_realname=${args['rname']:-${args['rn']:-}}
     declare -r profile_name=${args['pname']:-${args['pn']:-}}
 
     declare -r password=$(openssl rand -base64 16)
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     declare -r user_data_file=${table_users}/${username}.json
     declare old_password=""
+
+    if [[ -z $user_realname ]]; then
+        reply_msg res='error, name of the user, rn=NAME' \
+            return=$ERR_EXPR_FAILED show=true
+    fi
 
     ### the agent path be created
     if ! [[ -d $table_users/ ]]; then
