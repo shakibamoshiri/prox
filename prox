@@ -456,6 +456,31 @@ private::user_create(){
             return=$ERR_EXPR_FAILED show=true
     fi
 
+    ### generate a static page for it
+    declare -A profile=()
+    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
+    for line in "${tmp[@]}"; do
+        IFS=\ =\  read key value <<< "$line"
+        profile[$key]="$value";
+    done
+
+    declare -r dash_path=${profile[web_root]}
+    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$username
+    declare -r user_profile_index_html=$user_profile_path/index.html
+    declare -r agent_index_html=$dash_path/${agent_info[groupname]}.html
+
+    if ! [[ -f $agent_index_html ]]; then
+        reply_msg res="error, agent index $agent_index_html not found" \
+            return=$ERR_EXPR_FAILED show=true
+    fi
+    mkdir -p $user_profile_path
+    rsync -az $agent_index_html $user_profile_index_html
+
+    declare -r user_profile_page=${profile[link]}/${agent_info[groupname]}/$username
+    declare -r user_qr_png=${profile_random}.png
+
+
+    ### iterate over all servers
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -A server_info=()
     # rm -f $__tmp_path/${__fn_name}.txt
@@ -504,23 +529,6 @@ private::user_create(){
     private::debug $LINENO "server_info[@]: ${server_info[@]}";
     private::debug $LINENO "db_info[users]: $table_users";
 
-    ### generate a static page for it
-    declare -A profile=()
-    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
-    for line in "${tmp[@]}"; do
-        IFS=\ =\  read key value <<< "$line"
-        profile[$key]="$value";
-    done
-
-    declare -r dash_path=${profile[web_root]}
-    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/$username
-    declare -r user_profile_index_html=$user_profile_path/index.html
-
-    mkdir -p $user_profile_path
-    rsync -az $dash_path/${agent_info[groupname]}.html $user_profile_index_html
-
-    declare -r user_profile_page=${profile[link]}/${agent_info[groupname]}/$username
-    declare -r user_qr_png=${profile_random}.png
 
     ### qr image
     perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_profile_index_html
@@ -661,6 +669,11 @@ private::user_config(){
 
     if ! [[ -f $user_data_file ]]; then
         reply_msg res="error, user=$username not found" \
+            return=$ERR_EXPR_FAILED show=true
+    fi
+
+    if ! [[ -f $client_sample_file ]]; then
+        reply_msg res="error, $client_sample_file not found" \
             return=$ERR_EXPR_FAILED show=true
     fi
 
@@ -2548,8 +2561,8 @@ private::app_test(){
         args[$key]="$value";
     done
 
-    # declare -r client_sample_file=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}/client.sample.json
-    declare -r client_sample_file=client.sample.json
+    declare -r client_sample_file=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}/client.sample.json
+    # declare -r client_sample_file=client.sample.json
     declare -r server_sample_file=server.sample.json
     private::title false "commands test:"
     private::app_test_cmd
