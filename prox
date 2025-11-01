@@ -338,6 +338,7 @@ jq::user_init(){
 
     {
         user: $config[0].username,
+        name: $config[0].realname,
         sessions: 0,
         ctime: (now|floor),
         atime: 0,
@@ -384,6 +385,7 @@ jq::user_update(){
 
     {
         user: .user,
+        name: .name,
         sessions: .sessions,
         ctime: $log.ctime,
         atime: (now|floor),
@@ -461,7 +463,8 @@ private::user_create(){
     declare -r username_random=$(openssl rand -hex 3)
     declare -r profile_random=$(openssl rand -hex 5)
 
-    declare -r username=${agent_prefix}${args['user']:-${username_random}}
+    declare -r username=${args['user']:-${username_random}}
+    declare -r ss_username="${agent_prefix}${username}"
     declare -r user_gig=${args[gig]:-${pool_info[gig]}}
     declare -r user_day=${args[day]:-${pool_info[day]}}
 
@@ -477,8 +480,8 @@ private::user_create(){
 
 
     ### make sure agent_prefix is not duplicated
-    if [[ ${username/$agent_prefix} =~ ^$agent_prefix ]]; then
-        reply_msg res="error, username format is incorrect ${username/$agent_prefix/}" \
+    if [[ ${username} =~ ^$agent_prefix ]]; then
+        reply_msg res="error, username format is incorrect ${username}" \
             return=$ERR_EXPR_FAILED show=true
     fi
 
@@ -553,17 +556,17 @@ private::user_create(){
             fi
 
             ### check if used already created or not
-            if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
+            if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
                 private::print ${args[silent]:-false} "existed [${server_info[location]}]";
                 continue
             fi
 
             if [[ -f $user_data_file ]]; then
                 old_password=$(jq '.uPSK' < $user_data_file)
-                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": '${old_password}' }'
+                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": '${old_password}' }'
                 private::print ${args[silent]:-false} "readded [${server_info[location]}]";
             else
-                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${username}'", "uPSK": "'${password}'" }'
+                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": "'${password}'" }'
                 private::print ${args[silent]:-false} "created [${server_info[location]}]";
             fi
         done 
@@ -582,15 +585,18 @@ private::user_create(){
 
     ### save the new user
     if [[ $renew == false ]]; then
-        curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | \
-        jq --exit-status "
-            .realname=\"$user_realname\" |
-            .ctime=(now|todate) |
-            .day=$user_day |
-            .gig=$user_gig |
-            .page=\"$user_profile_page\/\" |
-            .profile=\"$profile_random\" | del(.downlinkBytes,.uplinkBytes,.downlinkPackets,.uplinkPackets,.tcpSessions,.udpSessions)" | \
-                sponge $user_data_file
+        curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | \
+        jq --exit-status '
+        {
+            username: "'$username'",
+            realname: "'$user_realname'",
+            ctime: (now|todate),
+            day: '$user_day',
+            gig: '$user_gig',
+            uPSK: .uPSK,
+            page: "'$user_profile_page'",
+            profile: "'$profile_random'"
+        }' | sponge $user_data_file
     fi
 
     ### remove old configs
@@ -618,6 +624,8 @@ private::user_delete(){
     done
 
     declare -r username=${args['user']:-}
+    declare -r ss_username="${agent_prefix}${username}"
+
     declare -r force=${args['force']:-false}
     declare -r select=${args['select']:-undefined}
 
@@ -648,7 +656,10 @@ private::user_delete(){
                 case $select in
                     local )
                         ### all local users
-                        mapfile -t all_users < <(ls -1 $table_users | sed 's/.json//g')
+                        # mapfile -t all_users < <(ls -1 $table_users | sed 's/.json//g')
+                        declare -a all_users=($(echo $table_users/*))
+                        all_users=(${all_users[@]%%.json})
+                        all_users=(${all_users[@]/*\//$agent_prefix})
                     ;;
                     remote )
                         ### all remote users
@@ -667,15 +678,15 @@ private::user_delete(){
                 esac
 
                 for user in ${all_users[@]}; do
-                    private::printf ${args[silent]:-false} "delete $user"
+                    private::printf ${args[silent]:-false} "delete ${user#$agent_prefix}"
                     curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$user
                     private::print ${args[silent]:-false} "deleted [${server_info[location]}]"
                 done
             else
                 private::printf ${args[silent]:-false} "delete $username"
                 ### check if used already created or not
-                if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$username | jq --exit-status '.username=="'$username'"' > /dev/null 2>&1; then
-                    curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$username 
+                if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
+                    curl --silent --request DELETE --url http://${ssm_api_addr}/server/v1/users/$ss_username 
                     private::print ${args[silent]:-false} "deleted [${server_info[location]}]"
                 else
                     private::print ${args[silent]:-false} "noexist [${server_info[location]}]"
@@ -1150,6 +1161,7 @@ private::user_list(){
     reply_msg res="api_addr: $ssm_api_addr, sid: ${random_serve_id}" \
         show=true newline=yes $@
 }
+
 private::user_archive(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
@@ -1512,13 +1524,14 @@ public::user(){
                 #     ;;
                 # esac
             else
-                cat fifo_${agent_id} | private::telegram_msg aid=$agent_id silent=true > /dev/null 2>&1 &
+                declare -r fifo=${db_info[root]}/${agent_id}
+                cat $fifo | private::telegram_msg aid=$agent_id silent=true > /dev/null 2>&1 &
                 echo "the result for <b>${pfn/_/ }</b> was queued: $!"
 
                 { private::${pfn} "$@" || true; } |& sponge $__log_path/$agent_id/${pfn}.txt
 
                 echo -e "\nthe result for <b>${pfn/_/ }</b> queue: $!" >> $fn_call_result
-                { cat $fn_call_result > fifo_${agent_id}; } &
+                { cat $fn_call_result > $fifo; } &
             fi
         ;;
         * )
@@ -1671,7 +1684,7 @@ private::server_fetch(){
             if [[ $(private::server_test) == true ]]; then
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
                     jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
-                    jq '.users[] |=  select(.username | test("^'${agent_prefix}'"))' |
+                    jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "")' |
                     sponge $api_addr_json_file 2>&1
                 private::print false "fetched"
             fi
@@ -1791,7 +1804,7 @@ private::server_stat(){
                 jq::table $table
             else
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
-                jq '.users[] |=  select(.username | test("^'${agent_prefix}'"))' | \
+                jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "")' | \
                 jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
                 jq::summary ${server_info[api_addr]} $count ${args[active]:-all} | \
                 jq::table $table
@@ -1952,13 +1965,14 @@ public::server(){
             if [[ -t 0 ]]; then
                 { private::${pfn} "$@"; } |& tee $__log_path/$agent_id/${pfn}.txt
             else
-                cat fifo_${agent_id} | private::telegram_msg aid=$agent_id silent=true code=true > /dev/null 2>&1 &
+                declare -r fifo=${db_info[root]}/${agent_id}
+                cat $fifo | private::telegram_msg aid=$agent_id silent=true code=true > /dev/null 2>&1 &
                 echo "the result for <b>${pfn/_/ }</b> was queued: $!"
 
                 { private::${pfn} "$@" || true; } |& sponge $__log_path/$agent_id/${pfn}.txt
 
                 echo -e "\nthe result for <b>${pfn/_/ }</b> queue: $!" >> $fn_call_result
-                { cat $fn_call_result > fifo_${agent_id}; } &
+                { cat $fn_call_result > $fifo; } &
             fi
         ;;
 
@@ -2215,7 +2229,14 @@ private::data_setup(){
     fi
 
     ### readable name to random names
+    private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_info[realname]}"
     ln -sf ${agent_info[groupname]} ${db_info[root]}/${agent_info[realname]}
+    private::print ${args[silent]:-false} "created"
+
+    ### mkfifo with each
+    private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_id}"
+    mkfifo ${db_info[root]}/${agent_id}
+    private::print ${args[silent]:-false} "created"
 
     reply_msg res=success ${@}
 }
@@ -2351,11 +2372,12 @@ private::data_wipe(){
     if [[ -d $agent_path ]]; then
         if [[ $force == true ]]; then
             find $agent_path -type f -not -name client.sample.json -delete
-            find $agent_dash/* -type f -delete
-            find $agent_dash/* -type d -delete
+            rm -fr $agent_path/${db_info[archive]}/*
+            find $agent_dash/* -type f -delete 2> /dev/null
+            find $agent_dash/* -type d -delete 2> /dev/null
         else
             find $agent_path -type f -not -name client.sample.json
-            find $agent_dash/* -type d
+            find $agent_dash/* -type d 2> /dev/null
             reply_msg res="warning use force=true to wipe all" \
                 show=true return=$EXIT_SUCCESS
         fi
