@@ -229,7 +229,7 @@ function reply_msg(){
     declare -r final_reply_msg="${newline}res: $result
 aid: ${agent_info[id]:-undefined}
 pid: ${pool_info[id]:-undefined}
-agn: ${agent_info[groupname]:-undefined}
+arn: ${agent_info[realname]:-undefined}
 usr: <code>${username:-${new_username:-undefined}}</code>"
 
     printf "$final_reply_msg\n"
@@ -1167,6 +1167,10 @@ private::user_list(){
 
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     mapfile -t users < <(ls -1 $table_users | sed 's/.json//g')
+
+    if [[ ${#users[@]} == 0 ]]; then
+        reply_msg res="no user found to list" show=true return=$ERR_EXPR_FAILED
+    fi
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -r random_serve_id=$((RANDOM % ${#server_ids[@]}))
