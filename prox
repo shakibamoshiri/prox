@@ -2260,6 +2260,7 @@ private::data_setup(){
 
     ### readable name to random names
     private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_info[realname]}"
+    rm -f ${db_info[root]}/${agent_info[realname]}
     ln -sf ${agent_info[groupname]} ${db_info[root]}/${agent_info[realname]}
     private::print ${args[silent]:-false} "created"
 
