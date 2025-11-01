@@ -318,10 +318,25 @@ yq::table(){
 }
 
 jq::user_stat(){
-    jq '.users | map({user: .username, bytes: (.downlinkBytes + .uplinkBytes), sessions: (.tcpSessions + .udpSessions)})' $table_servers/*.json | \
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+
+    declare -r user=${args['user']:-$user}
+
+    jq '.users | map({ user: .username, name: "name", bytes: (.downlinkBytes + .uplinkBytes), sessions: (.tcpSessions + .udpSessions)})' $table_servers/*.json | \
         jq '.[] | select(.user=="'$username'")' | \
-        jq -s '(map(.bytes)|add) as $bytes |
-        { user: .[0].user, bytes: (map(.bytes)|add), sessions: (map(.sessions)|add), status: (if ($bytes > 0) then "connected" else "created" end) }'
+        jq -s '
+            (map(.bytes)|add) as $bytes |
+        {
+            user: .[0].user,
+            name: $user[0].realname,
+            bytes: (map(.bytes)|add),
+            sessions: (map(.sessions)|add),
+            status: (if ($bytes > 0) then "connected" else "created" end)
+        }' --slurpfile user $table_users/${user}.json
 }
 
 jq::user_init(){
@@ -886,6 +901,7 @@ private::user_stat(){
     declare -r force=${args['force']:-false}
 
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
+    declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
 
     if [[ -z $username ]]; then
         reply_msg res='error, user=<string> ?' return=$ERR_EXPR_FAILED show=true
@@ -894,10 +910,24 @@ private::user_stat(){
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
         case $caller in
             user_list )
-                jq --null-input '{user: "'$username'", bytes: "X", sessions: "X", status: "deleted"}'
+                jq --null-input '{
+                    user: "'$username'",
+                    name: $user[0].realname,
+                    bytes: "X", 
+                    sessions: "X", 
+                    status: "deleted"
+                 }' --slurpfile user $table_users/${user}.json
+
             ;;
             * )
-                jq --null-input '{user: "'$username'", bytes: "?", sessions: "?", status: "?"}' | jq::table true
+                jq --null-input '{
+                    user: "'$username'", 
+                    name: "NAME", 
+                    bytes: "?", 
+                    sessions: "?", 
+                    status: "?"
+                }' --slurpfile user $table_users/${user}.json | \
+                    jq::table true
             ;;
         esac
         # reply_msg res="error, user=$username not found offline" return=$ERR_EXPR_FAILED show=true
@@ -911,7 +941,7 @@ private::user_stat(){
                 jq::user_stat
             ;;
             * )
-                jq::user_stat | jq::table true
+                jq::user_stat user=$username | jq::table true
             ;;
         esac
     fi
@@ -1684,7 +1714,7 @@ private::server_fetch(){
             if [[ $(private::server_test) == true ]]; then
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
                     jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
-                    jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "")' |
+                    jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "") | (.users[].agent_id |= '$agent_id')' |
                     sponge $api_addr_json_file 2>&1
                 private::print false "fetched"
             fi
