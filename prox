@@ -2364,20 +2364,61 @@ private::data_sync(){
     #     reply_msg res='error target=<string> ?' show=true return=$ERR_EXPR_FAILED
     # fi
 
+    # declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
+    declare -r pool_servers_file=${__pool_path}/${agent_pool_id}.yaml
 
-    declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
-    mapfile -t source_users < <(jq -r  'select(.server_loc=="'$source'") | .users[] | .username' $table_servers/*.json)
-    if (( ${#source_users[@]} ==  0 )); then
-        reply_msg res="error source=$source not found, try: server list" \
-            show=true return=$ERR_EXPR_FAILED
+    # declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
+    declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
+
+
+    declare -ir server_id=$(yq '.servers[] | select(.location == "'$source'") | .id' $pool_servers_file)
+    declare -r src_ssm_api_addr=$(yq '.servers[] | select(.id=='$server_id') | .api_addr + ":" + .api_port' $pool_servers_file)
+
+    if [[ $base == remote ]]; then
+        mapfile -t source_users < <(
+            curl --silent --request GET --url http://${src_ssm_api_addr}/server/v1/users | \
+            jq -r '.users[] | select(.username | test("^'${agent_prefix}'")) | .username + " " + .uPSK'
+        )
+    elif [[ $base == local ]]; then
+        mapfile -t source_users < <(jq -r  '"_'${agent_id}'_" + .username + " " + .uPSK' $table_users/*.json)
+    else
+        reply_msg res="error base=$base not found" \
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
-    for user in ${source_users[@]}; do
-        private::printf false "sync.$user"
-        private::user_create user=$user silent=true
-        private::print false "syncing"
+    if (( ${#source_users[@]} ==  0 )); then
+        reply_msg res="error source=$source not found, try: server list" \
+            return=$ERR_EXPR_FAILED show=true newline=false
+    fi
 
+    ### iterate over all servers, exclude the source server
+    mapfile -t server_ids < <(yq '.servers[] | select(.id != '$server_id') | .id' $pool_servers_file --output-format props)
+    declare -A server_info=()
+
+    # private::title ${args[silent]:-false} "id location username result"
+    for sid in "${server_ids[@]}"; do
+        mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
+        for line in "${props[@]}"; do
+            IFS=\ =\  read key value <<< "$line"
+            server_info[$key]="$value";
+        done
+        ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
+
+        for item in "${source_users[@]}"; do
+            read ss_username password <<< "$item"
+            private::printf ${args[silent]:-false} "create ${ss_username##_*_}"
+            if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
+                private::print ${args[silent]:-false} "existed [${server_info[location]}]";
+                continue
+            else
+                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": "'${password}'" }'
+                private::print ${args[silent]:-false} "readded [${server_info[location]}]";
+            fi
+        done
     done
+
+    ### fetch to refresh
+    private::server_fetch silent=true $@
 
     reply_msg res=success ${@}
 }
