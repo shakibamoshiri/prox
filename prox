@@ -546,7 +546,7 @@ private::user_create(){
     fi
 
     ### remove old static page
-    rm -rf user_profile_path
+    rm -rf $user_profile_path
 
     ### make new static page
     mkdir -p $user_profile_path
