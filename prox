@@ -217,7 +217,7 @@ function reply_msg(){
     private::debug $LINENO "args[@]: ${args[@]}";
     private::debug $LINENO "!args[@]: ${!args[@]}";
 
-    declare -r newline="${args[newline]:+$'\n'}"
+    declare -r newline_flag="${args[newline]:-true}"
     declare -r result="${args[res]:-undefined}"
     declare -ir return=${args[return]:-0}
     declare -r show=${args[show]:-false}
@@ -226,11 +226,17 @@ function reply_msg(){
         return 0
     fi
 
-    declare -r final_reply_msg="${newline}res: $result
+    if [[ $newline_flag == true ]]; then
+        declare -r newline=$'\n'
+    else
+        declare -r newline=""
+    fi
+
+    declare -r final_reply_msg="${newline}\
+res: $result
 aid: ${agent_info[id]:-undefined}
 pid: ${pool_info[id]:-undefined}
-arn: ${agent_info[realname]:-undefined}
-usr: <code>${username:-${new_username:-undefined}}</code>"
+arn: ${agent_info[realname]:-undefined}"
 
     printf "$final_reply_msg\n"
 
@@ -497,26 +503,29 @@ private::user_create(){
     ### make sure agent_prefix is not duplicated
     if [[ ${username} =~ ^$agent_prefix ]]; then
         reply_msg res="error, username format is incorrect ${username}" \
-            return=$ERR_EXPR_FAILED show=true
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
     ### the agent path should be created
     if ! [[ -d $table_users/ ]]; then
         reply_msg res='error, users table not found, run db init first' \
-            return=$ERR_EXPR_FAILED show=true
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
     if [[ -f $user_data_file ]]; then
         if [[ $renew == false ]]; then
             reply_msg res="error, user: $username already created, renew=true to renew" \
-                return=$ERR_EXPR_FAILED show=true
+                return=$ERR_EXPR_FAILED show=true newline=false
         fi
     else
         if [[ -z $user_realname ]]; then
             reply_msg res='error, name of the new user?, name=NAME' \
-                return=$ERR_EXPR_FAILED show=true
+                return=$ERR_EXPR_FAILED show=true newline=false
         fi
     fi
+
+    ### make sure all servers are up
+    private::server_check silent=true $@
 
     ### generate a static page for the user
     declare -A profile=()
@@ -533,64 +542,65 @@ private::user_create(){
 
     if ! [[ -f $agent_index_html ]]; then
         reply_msg res="error, agent index $agent_index_html not found" \
-            return=$ERR_EXPR_FAILED show=true
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
+
+    ### remove old static page
+    rm -rf user_profile_path
+
+    ### make new static page
     mkdir -p $user_profile_path
     rsync -az $agent_index_html $user_profile_index_html
 
     declare -r user_profile_page=${profile[link]}/${agent_info[groupname]}/$username
     declare -r user_qr_png=${profile_random}.png
 
-
     ### iterate over all servers
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     declare -A server_info=()
-    # rm -f $__tmp_path/${__fn_name}.txt
-    # {
-        # private::title ${args[silent]:-false} "id location username result"
-        for sid in "${server_ids[@]}"; do
-            mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
-            for line in "${props[@]}"; do
-                IFS=\ =\  read key value <<< "$line"
-                server_info[$key]="$value";
-            done
-            ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
 
-            private::debug $LINENO "nc -tzv ${server_info['api_addr']} ${server_info['api_port']}";
+    # private::title ${args[silent]:-false} "id location username result"
+    for sid in "${server_ids[@]}"; do
+        mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
+        for line in "${props[@]}"; do
+            IFS=\ =\  read key value <<< "$line"
+            server_info[$key]="$value";
+        done
+        ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
 
-            private::printf ${args[silent]:-false} "create $username"
-            if [[ $(private::server_test) == false ]]; then
-                private::print ${args[silent]:-false} "failure $ssm_api_addr"
+        private::debug $LINENO "nc -tzv ${server_info['api_addr']} ${server_info['api_port']}";
 
-                if [[ ${args[force]:-false} == false ]]; then
-                    ### send notification to admins
-                    # echo "cd $PWD && ${0} telegram msg user=${agent_info[groupname]} aid=$agent_id msg=server=${server_info[location]}-fetch-failed" | at now +1 minute > /dev/null 2>&1
+        private::printf ${args[silent]:-false} "create $username"
+        # if [[ $(private::server_test) == false ]]; then
+        #     private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
-                    reply_msg res="error, server=${server_info[location]} is down, force=false" return=$ERR_EXPR_FAILED show=true
-                fi
-            fi
+        #     if [[ ${args[force]:-false} == false ]]; then
+        #         ### send notification to admins
+        #         # echo "cd $PWD && ${0} telegram msg user=${agent_info[groupname]} aid=$agent_id msg=server=${server_info[location]}-fetch-failed" | at now +1 minute > /dev/null 2>&1
 
-            ### check if used already created or not
-            if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
-                private::print ${args[silent]:-false} "existed [${server_info[location]}]";
-                continue
-            fi
+        #         reply_msg res="error, server=${server_info[location]} is down, force=false"
+        #             return=$ERR_EXPR_FAILED show=true newline=${args[silent]:+false}
+        #     fi
+        # fi
 
-            if [[ -f $user_data_file ]]; then
-                old_password=$(jq '.uPSK' < $user_data_file)
-                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": '${old_password}' }'
-                private::print ${args[silent]:-false} "readded [${server_info[location]}]";
-            else
-                curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": "'${password}'" }'
-                private::print ${args[silent]:-false} "created [${server_info[location]}]";
-            fi
-        done 
-    # } > $__tmp_path/${__fn_name}.txt 2>&1
-    # column -t < $__tmp_path/${__fn_name}.txt
+        ### check if used already created or not
+        if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
+            private::print ${args[silent]:-false} "existed [${server_info[location]}]";
+            continue
+        fi
+
+        if [[ -f $user_data_file ]]; then
+            old_password=$(jq '.uPSK' < $user_data_file)
+            curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": '${old_password}' }'
+            private::print ${args[silent]:-false} "readded [${server_info[location]}]";
+        else
+            curl --silent --request POST --url http://${ssm_api_addr}/server/v1/users --data '{ "username": "'${ss_username}'", "uPSK": "'${password}'" }'
+            private::print ${args[silent]:-false} "created [${server_info[location]}]";
+        fi
+    done
 
     private::debug $LINENO "server_info[@]: ${server_info[@]}";
     private::debug $LINENO "db_info[users]: $table_users";
-
 
     ### qr image
     perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_profile_index_html
@@ -609,13 +619,10 @@ private::user_create(){
             day: '$user_day',
             gig: '$user_gig',
             uPSK: .uPSK,
-            page: "'$user_profile_page'",
+            page: "'$user_profile_page'/",
             profile: "'$profile_random'"
         }' | sponge $user_data_file
     fi
-
-    ### remove old configs
-    rm -f ${user_profile_path}/!(index.html)
 
     ### generate new configs
     private::user_config aid=$agent_id user=$username method=local show=false force=true
@@ -624,8 +631,10 @@ private::user_create(){
 
     jq::user_init user=$username | sponge $user_profile_path/${username}.json
 
-    reply_msg res="page: <code>$user_profile_page/</code>" show=true \
-    newline=true
+    private::server_fetch silent=true $@
+
+    reply_msg res="page: $user_profile_page/" show=true \
+        newline=${args[silent]:+false}
 }
 
 private::user_delete(){
@@ -647,7 +656,7 @@ private::user_delete(){
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     
     if [[ -z $username ]]; then
-        reply_msg res='error, user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error, name of the user?, name=NAME' return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
@@ -707,13 +716,14 @@ private::user_delete(){
                     private::print ${args[silent]:-false} "noexist [${server_info[location]}]"
                 fi
             fi
-        done 
+        done
     # } > $__tmp_path/${fn_name}.txt 2>&1
     # column -t < $__tmp_path/${fn_name}.txt
 
     private::debug $LINENO "server_info[@]: ${server_info[@]}";
+    private::server_fetch silent=true $@
 
-    reply_msg res="user=$username deleted"  show=${args[silent]:+true} ${@}
+    reply_msg res="user=$username deleted" show=true newline=${args[silent]:+false} ${@}
 }
 
 private::user_config(){
@@ -741,7 +751,7 @@ private::user_config(){
     declare -r user_config_file=${table_configs}/${username}.json
 
     if [[ -z $username ]]; then
-        reply_msg res='error, user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
     fi
 
     if ! [[ -d $table_configs/ ]]; then
@@ -823,8 +833,8 @@ private::user_config(){
                 ### re-add link
                 perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="$user_profile_page/$profile_random" $user_profile_index_html
 
-                reply_msg res="link: <code>$user_profile_page/$profile_random</code>" \
-                show=true $@
+                reply_msg res="link: $user_profile_page/$profile_random" \
+                    show=true show=true newline=false $@
             ;;
 
             file )
@@ -857,8 +867,8 @@ private::user_config(){
                 ### re-add qr image
                 perl -i -s -lpe 's/(?<=img src=").*?(?=" alt=)/$arg/' -- -arg=$user_qr_png $user_profile_index_html
 
-                reply_msg res="link: <code>${user_profile_page}/$user_qr_png</code>" \
-                show=true $@
+                reply_msg res="link: ${user_profile_page}/$user_qr_png" \
+                    show=true newline=false $@
 
             ;;
             file )
@@ -904,7 +914,7 @@ private::user_stat(){
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
 
     if [[ -z $username ]]; then
-        reply_msg res='error, user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error, name to stat, name=NAME ?' return=$ERR_EXPR_FAILED show=true newline=?
     fi
     
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
@@ -916,17 +926,17 @@ private::user_stat(){
                     bytes: "X", 
                     sessions: "X", 
                     status: "deleted"
-                 }' --slurpfile user $table_users/${user}.json
+                 }' --slurpfile user $table_users/${username}.json
 
             ;;
             * )
                 jq --null-input '{
                     user: "'$username'", 
-                    name: "NAME", 
+                    name: $user[0].realname,
                     bytes: "?", 
                     sessions: "?", 
                     status: "?"
-                }' --slurpfile user $table_users/${user}.json | \
+                }' --slurpfile user $table_users/${username}.json | \
                     jq::table true
             ;;
         esac
@@ -965,7 +975,7 @@ private::user_bytes(){
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
 
     if [[ -z $username ]]; then
-        reply_msg res='error, user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
     fi
 
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
@@ -1079,7 +1089,7 @@ private::user_fetch(){
     declare -r user_bytes_file=$table_bytes/${username}.json
 
     if [[ -z $username ]]; then
-        reply_msg res='error: user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error: user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
     fi
 
     if ! [[ -f $user_bytes_file ]]; then
@@ -1109,11 +1119,13 @@ private::user_get(){
     declare -r server_name=$(hostname)
 
     if [[ -z $username ]]; then
-        reply_msg res='error: user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error: user=USERNAME ?' return=$ERR_EXPR_FAILED show=true \
+            newline=false
     fi
 
     if ! [[ -f $user_bytes_file ]]; then
-        reply_msg res="error: user=$username not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error: user=$username not found" return=$ERR_EXPR_FAILED\
+            show=true newline=false
     fi
 
 jq '
@@ -1156,6 +1168,13 @@ private::user_list(){
     private::debug $LINENO $FUNCNAME ;
     private::debug $LINENO "args: ${@}";
 
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+    declare select_status=${args[status]:-}
+
     declare -r data_int=$(private::data_int bool)
     if [[ $data_int == false ]]; then
         reply_msg res='error, data integrity failure' \
@@ -1186,14 +1205,15 @@ private::user_list(){
         ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
         # mapfile -t users < <(curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | jq -r '.users[] | .username')
         for user in ${users[@]}; do
-            private::user_stat user=$user caller=$fn_name
+            private::user_stat user=$user caller=$fn_name | \
             # curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$user | jq 'del(.uPSK)'
             # jq 'del(.uPSK,.page,.profile)' < $table_users/${user}.json
+            jq 'select(.status | test("'$select_status'"))'
         done | jq::table true
     done
 
     reply_msg res="api_addr: $ssm_api_addr, sid: ${random_serve_id}" \
-        show=true newline=yes $@
+        show=true newline=true $@
 }
 
 private::user_archive(){
@@ -1213,11 +1233,12 @@ private::user_archive(){
     declare -r user_bytes_file=$table_bytes/${username}.json
 
     if [[ -z $username ]]; then
-        reply_msg res='error: user=<string> ?' return=$ERR_EXPR_FAILED show=true
+        reply_msg res='error: user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
     fi
 
     if ! [[ -f $user_bytes_file ]]; then
-        reply_msg res="bytes for user=$username not found" return=$ERR_FILE_NOT_FOUND show=true
+        reply_msg res="bytes for user=$username not found" \
+            return=$ERR_FILE_NOT_FOUND show=true newline=false
     fi
 
     declare -ir time_in_sec=$(date +%s)
@@ -1234,7 +1255,7 @@ private::user_archive(){
     mv -f $table_bytes/${username}.json $old_user_bytes_file
     ## ln -fs  $archive_relative_path -t $table_bytes/
 
-    reply_msg res="user=$username archived" show=true $@
+    reply_msg res="user=$username archived" show=true newline=false $@
 }
 
 private::user_limit(){
@@ -1254,7 +1275,7 @@ private::user_limit(){
     # declare -r user_bytes_file=$table_bytes/${username}.json
 
     # if [[ -z $username ]]; then
-    #     reply_msg res='error: user=<string> ?' return=$ERR_EXPR_FAILED show=true
+    #     reply_msg res='error: user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
     # fi
 
     # if ! [[ -f $user_bytes_file ]]; then
@@ -1365,8 +1386,16 @@ private::user_page(){
 
     if [[ -z $user ]] && [[ -z $name ]]; then
         jq 'del(.uPSK,.profile)' $table_users/*.json | \
-        jq -s '. | to_entries | .[] | { index: (.key+1), user: .value.username, real: .value.realname, ctime: .value.ctime, day: .value.day, gig: .value.gig, page: .value.page }' | \
-        jq::table true
+        jq -s '. | to_entries | .[] |
+            {
+                index: (.key+1),
+                user: .value.username,
+                name: .value.realname,
+                ctime: .value.ctime,
+                day: .value.day,
+                gig: .value.gig,
+                page: .value.page
+            }' | jq::table true
     else
         if [[ -f $user_data_file ]]; then
             jq 'del(.uPSK,.profile)' $user_data_file | jq::table true
@@ -1376,8 +1405,16 @@ private::user_page(){
             else
                 if jq --exit-status 'del(.uPSK,.profile) | select(.realname=="'$name'")' $table_users/*.json > /dev/null 2>&1; then
                     jq 'del(.uPSK,.profile) | select(.realname=="'$name'")' $table_users/*.json | \
-                    jq -s '. | to_entries | .[] | { index: (.key+1), user: .value.username, real: .value.realname, ctime: .value.ctime, day: .value.day, gig: .value.gig, page: .value.page }' | \
-                    jq::table true
+                    jq -s '. | to_entries | .[] |
+                        {
+                            index: (.key+1),
+                            user: .value.username,
+                            name: .value.realname,
+                            ctime: .value.ctime,
+                            day: .value.day,
+                            gig: .value.gig,
+                            page: .value.page
+                        }' | jq::table true
                 else
                     reply_msg res="error, user with name=$name not found" show=true return=$ERR_FILE_NOT_FOUND
                 fi
@@ -1403,7 +1440,8 @@ private::user_remove(){
     declare -r user_data_file_hidden=$table_users/.${user}.json
 
     if [[ -z $user ]]; then
-        reply_msg res="error, a user=NAME to remove?" show=true return=$ERR_FILE_NOT_FOUND
+        reply_msg res="error, a user=USERNAME to remove?" show=true \
+            return=$ERR_FILE_NOT_FOUND newline=false
     fi
 
     if [[ -f $user_data_file ]]; then
@@ -1411,7 +1449,8 @@ private::user_remove(){
         mv $user_data_file $user_data_file_hidden
         reply_msg res="user=$user removed" show=true
     else
-        reply_msg res="warning, a user=$user not found" show=true return=$ERR_FILE_NOT_FOUND
+        reply_msg res="warning, a user=$user not found" show=true newline=false \
+            return=$ERR_FILE_NOT_FOUND
     fi
 }
 
@@ -1472,7 +1511,8 @@ public::user(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -1480,7 +1520,8 @@ public::user(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
@@ -1569,7 +1610,8 @@ public::user(){
             fi
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED \
+                show=true newline==
         ;;
     esac
 }
@@ -1602,7 +1644,7 @@ private::server_check(){
             done
             ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
             
-            private::printf ${args[silent]:-false} "check server=${server_info[location]}"
+            private::printf ${args[silent]:-false} "server ${server_info[location]}"
 
             declare fetched=$(private::server_test)
             if [[ $(private::server_test) == true ]]; then
@@ -1616,7 +1658,8 @@ private::server_check(){
                     ### send notification to admins
                     echo "cd $PWD && ${0} telegram msg user=${agent_info[groupname]} aid=$agent_id msg='server=${server_info[location]}, fn=$fn_name, status=failed'" | at now +1 minute > /dev/null 2>&1
 
-                    reply_msg res="error, server=${server_info[location]} is down, force=false" return=$ERR_EXPR_FAILED show=true
+                    reply_msg res="error, server=${server_info[location]} is down, force=false" \
+                        return=$ERR_EXPR_FAILED show=true newline=true
                 fi
             fi
 
@@ -1640,8 +1683,10 @@ private::server_check(){
         done
     } # | column -t
 
-    if [[ ${#FUNCNAME[@]} ==  4 ]]; then
-        reply_msg res="all servers are up" show=${args[silent]:+true} ${@}
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        # reply_msg res="all servers are up" show=${args[silent]:+true} \
+        reply_msg res="all servers are up" show=true \
+            newline=${args[silent]:+false} $@
     fi
 }
 
@@ -1658,6 +1703,8 @@ private::server_list(){
 
     ### jq solution
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
+    declare servers_name=$(yq eval-all -r '[.server_loc] | join(", ")' $table_servers/*.json)
+
     jq  '{ id: .server_id, location: .server_loc, ssm_api: .ssm_api, users: (.users | length) }' $table_servers/*.json | \
     jq::table true
 
@@ -1677,7 +1724,11 @@ private::server_list(){
     #     done
     # } | column -t
 
-    reply_msg res=success $@
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        # reply_msg res="all servers are up" show=${args[silent]:+true} \
+        reply_msg res="servers in $servers_name" show=true \
+            newline=${args[silent]:+false} $@
+    fi
 }
 
 private::server_fetch(){
@@ -1712,7 +1763,7 @@ private::server_fetch(){
             ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
             api_addr_json_file=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}/${server_info[api_addr]}.json
 
-            private::printf false "fetch server=${server_info[location]}"
+            private::printf ${args[silent]:-false} "server ${server_info[location]}"
 
             declare fetched=$(private::server_test)
             if [[ $(private::server_test) == true ]]; then
@@ -1720,7 +1771,7 @@ private::server_fetch(){
                     jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
                     jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "") | (.users[].agent_id |= '$agent_id')' |
                     sponge $api_addr_json_file 2>&1
-                private::print false "fetched"
+                private::print ${args[silent]:-false} "fetched"
             fi
 
             if [[ $(private::server_test) == false ]]; then
@@ -1730,13 +1781,17 @@ private::server_fetch(){
                     ### send notification to admins
                     echo "cd $PWD && ${0} telegram msg user=${agent_info[groupname]} aid=$agent_id msg='server=${server_info[location]}, fn=$fn_name, status=failed'" | at now +1 minute > /dev/null 2>&1
 
-                    reply_msg res="error, server=${server_info[location]} is down, force=false" return=$ERR_EXPR_FAILED show=true
+                    reply_msg res="error, server=${server_info[location]} is down, force=false" \
+                        return=$ERR_EXPR_FAILED show=true newline=${args[silent]:+false}
                 fi
             fi
         done
     } # |  column -t
 
-    reply_msg res=success $@
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        reply_msg res="all servers fetched" show=true \
+            newline=${args[silent]:+false} $@
+    fi
 }
 
 private::server_stat(){
@@ -1821,6 +1876,8 @@ private::server_stat(){
             done
 
             ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
+            api_addr_json_file=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}/${server_info[api_addr]}.json
+
             count=$(
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
                 jq '.users[] |=  select(.username | test("^'${agent_prefix}'"))' | \
@@ -1860,6 +1917,12 @@ private::server_stat(){
     #     exit $ERR_FILE_NOT_FOUND
     # fi
     # reply_msg res=success ${@}
+
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        # reply_msg res="all servers are up" show=${args[silent]:+true} \
+        reply_msg res="stat of ${#server_ids[@]} servers" show=true \
+            newline=${args[silent]:+false} $@
+    fi
 }
 
 private::server_test(){
@@ -1919,7 +1982,8 @@ public::server(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -1927,8 +1991,8 @@ public::server(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
-        # reply_msg res="agent not found" retun=$ERR_EXPR_FAILED
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
@@ -2034,9 +2098,10 @@ private::agent_pool(){
 
     ### update the file
     if [[ $active_pool_id == ${agent_info[pool_id]} ]]; then
-        yq --exit-status ".pools" $agent_config_file | yq::table true
+        ${args[silent]:-false} || yq --exit-status ".pools" $agent_config_file | yq::table true
 
-        reply_msg res="current pool-id: ${active_pool_id}" show=true newline=true
+        reply_msg res="current pool-id: ${active_pool_id}" show=true \
+            newline=${args[silent]:+false} $@
         exit $EXIT_SUCCESS
     fi
 
@@ -2049,12 +2114,16 @@ private::agent_pool(){
             reply_msg res="error, pool-id: ${new_pool_id} not found" show=true return=$ERR_EXPR_FAILED $@
         fi
 
+        ### update the file
         yq --exit-status -i '.agent.pool_id='${new_pool_id}'' $agent_config_file
+
+        ${args[silent]:-false} || \
         yq --exit-status -o json  ".pools[] | select(.id==${active_pool_id})" \
             $agent_config_file | jq::table true
     fi
 
-    reply_msg res="set new pool-id: ${active_pool_id}" show=true newline=true $@
+    reply_msg res="set new pool-id: ${active_pool_id}" show=true \
+        newline=${args[silent]:+false} $@
 }
 
 private::agent_server(){
@@ -2139,7 +2208,8 @@ public::agent(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -2147,7 +2217,8 @@ public::agent(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
@@ -2312,7 +2383,11 @@ private::data_test(){
 
     private::title false "\ndata tests"
     private::printf false "user integrity"
+    declare -r test=$(private::data_int bool)
     private::data_int string
+    if [[ $test == false ]]; then
+        private::data_int table
+    fi
 
 
     reply_msg res=success ${@}
@@ -2332,6 +2407,11 @@ private::data_int(){
         string | str | s )
             jq '.users | length' ${table_servers}/*.json | jq -rs 'if (max == min) then "passed" else "failure" + " min:" + (min|tostring) + " max:" + (max|tostring) end'
         ;;
+        table )
+            jq '{ location: .server_loc, users: (.users | length)}' ${table_servers}/*.json  | \
+                jq -rs '.[].min=(map(.users)|min) | .[].max=(map(.users)|max) | map({source: .location, users: .users, failure: (.users!=.max)}) | .[]' | \
+                jq::table true
+        ;;
         * )
             echo type=$type
         ;;
@@ -2347,21 +2427,24 @@ private::data_sync(){
         IFS== read key value <<< "$pram"
         args[$key]="$value";
     done
+    declare -r base=${args[base]:-online}
+    declare -r force=${args[force]:-false}
 
     declare -r data_int=$(private::data_int bool)
-    if [[ $data_int == true ]]; then
-        reply_msg res='error, data integrity test passed' \
-        show=true return=$ERR_EXPR_FAILED
+    if [[ $data_int == true ]] && [[ $force == false ]]; then
+        reply_msg res='warning, data integrity test passed, use force=true to ignore' \
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
     declare -r source=${args['source']:-${args['src']:-${args['s']:-undefined}}}
     if [[ $source == undefined ]]; then
-        reply_msg res='error source=<string> ?' show=true return=$ERR_EXPR_FAILED
+        reply_msg res='error server name sourcer=NAME ?' \
+            return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
     # declare -r target=${args['target']:-${args['tar']:-${args['t']:-undefined}}}
     # if [[ $target == undefined ]]; then
-    #     reply_msg res='error target=<string> ?' show=true return=$ERR_EXPR_FAILED
+    #     reply_msg res='error target=USERNAME ?' show=true return=$ERR_EXPR_FAILED
     # fi
 
     # declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -2454,7 +2537,7 @@ private::data_wipe(){
         else
             find $agent_path -type f -not -name client.sample.json
             find $agent_dash/* -type d 2> /dev/null
-            reply_msg res="warning use force=true to wipe all" \
+            reply_msg res="warning, use force=true to wipe all" \
                 show=true return=$EXIT_SUCCESS
         fi
     else
@@ -2513,7 +2596,8 @@ public::data(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -2521,7 +2605,8 @@ public::data(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
@@ -2787,7 +2872,8 @@ public::telegram(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -2795,7 +2881,8 @@ public::telegram(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
@@ -2861,7 +2948,7 @@ public::telegram(){
 # app command
 ################################################################################
 private::app_test_cmd() {
-    declare -a cmds=(printf echo mkdir jq yq qrencode rsync nc);
+    declare -a cmds=(printf echo mkdir jq yq qrencode rsync nc mkfifo);
 
     for cmd in ${cmds[@]}; do
         if which $cmd > /dev/null 2>&1; then
@@ -2977,7 +3064,7 @@ private::app_test(){
     declare -r server_sample_file=server.sample.json
     private::title false "commands test:"
     private::app_test_cmd
-    
+
     private::title false "\ndirectories test:"
     private::app_test_dir
 
@@ -3073,7 +3160,7 @@ private::app_reset(){
         args[$key]="$value";
     done
 
-    read -p 'YOU ARE 100% SURE? <YES>: ' confirm
+    read -p 'YOU ARE 100% SURE? TYPE "YES" to proceed: ' confirm
     if [[ $confirm == YES ]]; then
         private::title ${args[silent]:-false} "user delete local users:"
         private::user_delete aid=$agent_id user=all force=true select=local
@@ -3132,7 +3219,8 @@ public::app(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, aid=<number> ?" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
@@ -3140,7 +3228,8 @@ public::app(){
         agent_info[id]=?
         agent_info[groupname]=?
         pool_info[id]=?
-        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED show=true
+        reply_msg res="error, agent-id=$agent_id not found" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     ### check for errors in yaml file
