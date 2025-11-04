@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #
-# full AAA server for shadowsocks in sing-box
+# full AAA wrapper for shadowsocks in sing-box
 # frontend: Bash
 # backend: sing-box proxy v1.12 and upper
 #
