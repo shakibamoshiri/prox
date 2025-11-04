@@ -1049,12 +1049,13 @@ private::user_init(){
 
     ### find connected users
     # [inefficient]  mapfile -t local_users < <(ls -1 $table_users | sed 's/.json//g')
-    mapfile -t online_users < <(jq -r '.users[] | .username' $table_servers/*.json | sort | uniq)
+    ## mapfile -t online_users < <(jq -r '.users[] | .username' $table_servers/*.json | sort | uniq)
+    mapfile -t online_users < <(yq -r eval-all '[.users[] | select((.tcpSessions + .tcpSessions) > 0) | .username] | unique | sort | .[]' $table_servers/*.json | sort | uniq)
     for user in ${online_users[@]}; do
-        declare -i user_bytes=$(private::user_bytes user=$user)
-        if (( user_bytes == 0 )); then
-            continue
-        else
+        ## declare -i user_bytes=$(private::user_bytes user=$user)
+        ## if (( user_bytes == 0 )); then
+        ##     continue
+        ## else
             if [ -f $table_bytes/${user}.json ]; then
                 private::printf ${args[silent]:-false} "update user=$user"
                 jq::user_update $@
@@ -1067,7 +1068,7 @@ private::user_init(){
                 ### notify
                 echo "cd $PWD && ${0} user notif user=$user aid=$agent_id msg=user-init " | at now +1 minute > /dev/null 2>&1
             fi
-        fi
+        ## fi
     done
 
     reply_msg res=success ${@}
@@ -1283,12 +1284,13 @@ private::user_limit(){
     # fi
 
     
-    mapfile -t online_users < <(jq -r '.users[] | .username' $table_servers/*.json | sort | uniq)
+    ## mapfile -t online_users < <(jq -r '.users[] | .username' $table_servers/*.json | sort | uniq)
+    mapfile -t online_users < <(yq -r eval-all '[.users[] | select((.tcpSessions + .tcpSessions) > 0) | .username] | unique | sort | .[]' $table_servers/*.json | sort | uniq)
     for user in ${online_users[@]}; do
-        declare -i user_bytes=$(private::user_bytes user=$user)
-        if (( user_bytes == 0 )); then
-            continue
-        else
+        ## declare -i user_bytes=$(private::user_bytes user=$user)
+        ## if (( user_bytes == 0 )); then
+        ##     continue
+        ## else
             private::printf ${args[silent]:-false} "limit user=$user"
             
             ### traffic check
@@ -1362,7 +1364,7 @@ private::user_limit(){
             fi
 
             private::print ${args[silent]:-false} "ignored"
-        fi
+        ## fi
 
     done
 
