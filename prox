@@ -376,20 +376,6 @@ jq::user_init(){
             limit: false
         }
     }' --slurpfile config $table_users/${user}.json
-
-    declare -r dash_path=dash
-    declare -r user_dash_path=${dash_path}/${agent_info[groupname]}/$user
-    declare -r user_dash_file=$user_dash_path/index.html
-    declare -r user_qr_png=$user_dash_path/${user}.png
-
-    # ### remote the link
-    # perl -i -s -lpe 's/(?<=value=").*?(?=")/$arg/' -- -arg="removed-by-admin" $user_dash_file
-    #
-    # ### remote qr png file and img tag
-    # if [[ -f $user_qr_png ]]; then
-    #     rm -f $user_qr_png
-    #     perl -i -s -lpe '!/src="$arg"/ && print' -- -arg="${user}.png" $user_dash_file
-    # fi
 }
 
 jq::user_update(){
