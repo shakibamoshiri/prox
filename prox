@@ -990,7 +990,10 @@ private::user_bytes(){
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
 
     if [[ -z $username ]]; then
-        reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED show=true
+        # reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED \
+        # show=true newline=false
+        yq ea '. as $item ireduce ({}; . * $item ) | .users[] | { "user": .username, "bytes": (.downlinkBytes + .uplinkBytes), "sessions": (.tcpSessions + .udpSessions) }' $table_servers/*.json | jq::table true
+        exit 0
     fi
 
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
