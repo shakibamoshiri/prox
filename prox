@@ -932,7 +932,8 @@ private::user_stat(){
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
 
     if [[ -z $username ]]; then
-        reply_msg res='error, name to stat, name=NAME ?' return=$ERR_EXPR_FAILED show=true newline=?
+        reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
     
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
