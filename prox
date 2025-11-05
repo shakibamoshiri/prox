@@ -760,9 +760,12 @@ private::user_config(){
     declare -r user_data_file=${table_users}/${username}.json
     declare -r user_config_file=${table_configs}/${username}.json
 
-    if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
-        reply_msg res="error, user=$username has been deleted or server out of sync" \
-            return=$ERR_EXPR_FAILED show=true newline=false
+
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
+            reply_msg res="error, user=$username has been deleted or server out of sync" \
+                return=$ERR_EXPR_FAILED show=true newline=false
+        fi
     fi
 
     if [[ -z $username ]]; then
