@@ -2447,7 +2447,7 @@ private::data_sync(){
         IFS== read key value <<< "$pram"
         args[$key]="$value";
     done
-    declare -r base=${args[base]:-online}
+    declare -r base=${args[base]:-remote}
     declare -r force=${args[force]:-false}
 
     declare -r data_int=$(private::data_int bool)
