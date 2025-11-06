@@ -102,6 +102,7 @@ declare -r __pool_path=".${CLI_NAME}/pool";
 declare -r __agent_path=".${CLI_NAME}/agent";
 declare -r __log_path=".${CLI_NAME}/log";
 declare -r __tmp_path=".${CLI_NAME}/tmp";
+declare -r __cc_path=".${CLI_NAME}/cc";
 
 
 ################################################################################
@@ -782,7 +783,7 @@ private::user_config(){
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     declare -r table_configs=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
-    declare -r client_sample_file=$table_configs/client.sample.json
+    declare -r client_sample_file=$__cc_path/${agent_id}.json
     declare -r user_data_file=${table_users}/${username}.json
     declare -r user_config_file=${table_configs}/${username}.json
 
@@ -2383,7 +2384,7 @@ private::data_setup(){
     fi
 
     declare -r table_configs=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}
-    declare -r client_sample_file=$table_configs/client.sample.json
+    declare -r client_sample_file=$__cc_path/${agent_id}.json
 
     if ! [[ -f $client_sample_file ]]; then
         private::printf ${args[silent]:-false} "setup $client_sample_file"
@@ -3146,9 +3147,7 @@ private::app_test(){
         args[$key]="$value";
     done
 
-    declare -r client_sample_file=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}/client.sample.json
-    # declare -r client_sample_file=client.sample.json
-    declare -r server_sample_file=server.sample.json
+    declare -r client_sample_file=$__cc_path/${agent_id}.json
     private::title false "commands test:"
     private::app_test_cmd
 
@@ -3157,8 +3156,7 @@ private::app_test(){
 
     private::title false "\nfiles test:"
     private::app_test_file $agent_config_file $pool_servers_file \
-        $client_sample_file \
-        server.sample.json
+        $client_sample_file
 
     private::title false "\nservers test:"
     private::app_test_server

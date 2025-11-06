@@ -1,0 +1,5 @@
+{
+    "note-1": "add your client configuration here",
+    "note-2": "each agent has its own configuration",
+    "note-3": "the filename should match with agent-id"
+}
