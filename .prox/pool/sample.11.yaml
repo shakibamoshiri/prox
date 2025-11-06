@@ -1,0 +1,50 @@
+servers:
+  - id: 1
+    location: Germany
+    api_addr: 192.168.77.4
+    api_port: 8484
+    down_time: 0
+  - id: 2
+    location: French 
+    api_addr: 192.168.77.5
+    api_port: 8484
+    down_time: 0
+  - id: 3
+    location: Canada
+    api_addr: 192.168.77.6
+    api_port: 8484
+    down_time: 0
+
+db:
+  root: proxdb
+  info:
+    - name: a5f587a088
+      tables:
+        users: users
+        bytes: bytes
+        servers: servers
+        configs: configs
+        notifs: notifs
+        archive: archive
+      pass:
+        tls: Jz3qTzzI8WajlTBlEUos1vUSocH1tmNObAQ/RwZn4bg=
+        ss: 1FRzI+USnJpxNtZp5A2ZgQ==
+      profile:
+        link: http://192.168.2.10:4000
+        web_root: dash
+        sample: sample.html
+    - name: c0348a2ebf
+      tables:
+        users: users
+        bytes: bytes
+        servers: servers
+        configs: configs
+        notifs: notifs
+        archive: archive
+      pass:
+        tls: Jz3qTzzI8WajlTBlEUos1vUSocH1tmNObAQ/RwZn4bg=
+        ss: 1FRzI+USnJpxNtZp5A2ZgQ==
+      profile:
+        link: http://192.168.2.10:4000
+        web_root: dash
+        sample: sample.html
