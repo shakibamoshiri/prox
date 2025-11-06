@@ -1765,15 +1765,16 @@ private::server_list(){
 
     ### jq solution
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
-    declare servers_name=$(yq eval-all -r '[.server_loc] | join(", ")' $table_servers/*.json)
+    declare active_servers_name=$(yq eval-all -r '[.server_loc] | join(", ")' $table_servers/*.json 2> /dev/null)
 
-    jq  '{ id: .server_id, location: .server_loc, ssm_api: .ssm_api, users: (.users | length) }' $table_servers/*.json | \
-    jq::table true
+    ### jq solution
+    # jq  '{ id: .server_id, location: .server_loc, ssm_api: .ssm_api, users: (.users | length) }' $table_servers/*.json | \
+    # jq::table true
 
     ### bash solution
     # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     # {
-    #     echo id location address port
+    #     private::title ${args[silent]:-false} "id location address port"
     #     for sid in "${server_ids[@]}"; do
     #         mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
     #         declare -A server_info=()
@@ -1786,10 +1787,12 @@ private::server_list(){
     #     done
     # } | column -t
 
+    ### yq solution
+    yq ".servers" $pool_servers_file | yq::table true
+
     if [[ ${#FUNCNAME[@]} == 4 ]]; then
-        # reply_msg res="all servers are up" show=${args[silent]:+true} \
-        reply_msg res="servers in $servers_name" show=true \
-            newline=${args[silent]:+false} $@
+        reply_msg res="active servers: ${active_servers_name:-none}" show=true \
+            newline=${args[silent]:+false} "$@"
     fi
 }
 
