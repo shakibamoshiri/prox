@@ -510,7 +510,7 @@ private::user_create(){
     declare -r user_day=${args[day]:-${pool_info[day]}}
 
     declare -r user_realname=${args['name']:-${args['rn']:-}}
-    declare -r profile_name=${args['profile']:-${args['pn']:-}}
+    declare -r profile_name=${args['profile']:-${args['pn']:-${user_realname:-}}}
 
     declare -r password=$(openssl rand -base64 16)
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
@@ -645,11 +645,13 @@ private::user_create(){
     fi
 
     ### generate new configs
-    private::user_config aid=$agent_id user=$username method=local show=false force=true
-    private::user_config aid=$agent_id user=$username method=link show=false
-    private::user_config aid=$agent_id user=$username method=link type=qr show=false
+    private::user_config aid=$agent_id user=$username method=local show=false force=true "$@"
+    private::user_config aid=$agent_id user=$username method=link show=false "$@"
+    private::user_config aid=$agent_id user=$username method=link type=qr show=false "$@"
 
-    jq::user_init user=$username | sponge $user_profile_path/${username}.json
+    jq::user_init user=$username | \
+    jq 'del(.name)' | \
+    sponge $user_profile_path/${username}.json
 
     private::server_fetch silent=true $@
 
@@ -770,7 +772,8 @@ private::user_config(){
 
     declare -r username=${args['user']:-}
     declare -r force=${args['force']:-false}
-    declare -r profile_name=${args['profile']:-${args['pn']:-}}
+    declare -r user_realname=${args['name']:-${args['rn']:-}}
+    declare -r profile_name=${args['profile']:-${args['pn']:-${user_realname:-}}}
 
 
     declare -r type=${args['type']:-json}
