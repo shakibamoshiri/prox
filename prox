@@ -2399,7 +2399,12 @@ private::data_setup(){
 
     ### mkfifo with each
     private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_id}"
-    mkfifo ${db_info[root]}/${agent_id}
+    mkfifo ${db_info[root]}/${agent_id} > /dev/null 2>&1 || true
+    private::print ${args[silent]:-false} "created"
+
+    ### log dir per agent
+    private::printf ${args[silent]:-false} "setup log/$agent_id"
+    mkdir -p $__log_path/${agent_id}
     private::print ${args[silent]:-false} "created"
 
     reply_msg res=success ${@}
