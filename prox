@@ -2386,17 +2386,17 @@ private::data_setup(){
         private::print ${args[silent]:-false} "created"
     fi
 
-    declare -r table_configs=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}
-    declare -r client_sample_file=$__cc_path/${agent_id}.json
+    # declare -r table_configs=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}
+    # declare -r client_sample_file=$__cc_path/${agent_id}.json
 
-    if ! [[ -f $client_sample_file ]]; then
-        private::printf ${args[silent]:-false} "setup $client_sample_file"
-        rsync -az client.sample.json $client_sample_file
-        private::print ${args[silent]:-false} "created"
-    else
-        private::printf ${args[silent]:-false} "setup $client_sample_file"
-        private::print ${args[silent]:-false} "already created"
-    fi
+    # if ! [[ -f $client_sample_file ]]; then
+    #     private::printf ${args[silent]:-false} "setup $client_sample_file"
+    #     rsync -az client.sample.json $client_sample_file
+    #     private::print ${args[silent]:-false} "created"
+    # else
+    #     private::printf ${args[silent]:-false} "setup $client_sample_file"
+    #     private::print ${args[silent]:-false} "already created"
+    # fi
 
     ### readable name to random names
     private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_info[realname]}"
