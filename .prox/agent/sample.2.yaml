@@ -1,0 +1,35 @@
+agent:
+  id: 1
+  realname: jane
+  groupname: c0348a2ebf
+  phone: your_phone
+  pool_id: 11
+  bot_token: telegram_bot_token
+  bot_chat_id: user_chat_id or group_chat_id
+account:
+  wallet: 1000000
+  bill: 0
+  create: 0
+  renew: 0
+pools:
+  - id: 11
+    day: 30
+    gig: 40
+    sessions: 2
+    capacity: 100
+    servers: 3
+  - id: 12
+    day: 90
+    gig: 120
+    sessions: 4
+    capacity: 200
+    servers: 5
+cost:
+  - id: 11
+    day: 550
+    gig: 550
+    other: 1100
+  - id: 12
+    day: 750
+    gig: 500
+    other: 1100
