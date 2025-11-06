@@ -1229,7 +1229,14 @@ private::user_list(){
     declare -r data_int=$(private::data_int bool)
     if [[ $data_int == false ]]; then
         reply_msg res='error, data integrity failure' \
-            show=true return=$ERR_EXPR_FAILED
+            show=true newline=false return=$ERR_EXPR_FAILED
+            exit $ERR_EXPR_FAILED
+    fi
+
+    if [[ $data_int == empty ]]; then
+        reply_msg res='warning, server data not found to test, run server fetch' \
+            show=true newline=false return=$ERR_EXPR_FAILED
+            exit $ERR_EXPR_FAILED
     fi
 
     # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
@@ -1239,7 +1246,8 @@ private::user_list(){
     mapfile -t users < <(ls -1 $table_users | sed 's/.json//g')
 
     if [[ ${#users[@]} == 0 ]]; then
-        reply_msg res="no user found to list" show=true return=$ERR_EXPR_FAILED
+        reply_msg res="no user found to list" show=true newline=false \
+            return=$ERR_EXPR_FAILED
     fi
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
@@ -1263,8 +1271,10 @@ private::user_list(){
         done | jq::table true
     done
 
-    reply_msg res="api_addr: $ssm_api_addr, sid: ${random_serve_id}" \
-        show=true newline=true $@
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        reply_msg res="api_addr: $ssm_api_addr, sid: ${random_serve_id}" \
+            show=true newline=true $@
+    fi
 }
 
 private::user_archive(){
@@ -2500,6 +2510,12 @@ private::data_int(){
 
     declare -r type=${1:-string}
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
+
+    mapfile -t server_files < <(find $table_servers -name \*.json)
+    if [[ ${#server_files[@]} == 0 ]]; then
+        echo empty
+        exit $EXIT_SUCCESS
+    fi
 
     case $type in
         boolean | bool | b )
