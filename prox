@@ -2148,6 +2148,40 @@ public::server(){
 ################################################################################
 # agent command
 ################################################################################
+private::agent_init(){
+    declare -r fn_name=${FUNCNAME##*:};
+    private::debug $LINENO $FUNCNAME ;
+
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+
+    declare -r admin_samples=(
+        $__pool_path/sample.11.yaml
+        $__pool_path/sample.21.yaml
+        $__cc_path/sample.2.json
+        $__cc_path/sample.1.json
+        $__agent_path/sample.2.yaml
+        $__agent_path/sample.1.yaml
+    )
+
+    for src in "${admin_samples[@]}"; do
+        dst=${src/sample./}
+        private::printf ${args[silent]:-false} "init $dst"
+        if ! [[ -f $dst ]]; then
+            cat $src > $dst
+            private::print ${args[silent]:-false} "created"
+        else
+            private::print ${args[silent]:-false} "existed"
+        fi
+    done
+
+    reply_msg res="agents were initialized" show=true \
+        newline=${args[silent]:+false} $@
+}
+
 private::agent_pool(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
@@ -2241,8 +2275,9 @@ public::agent(){
     declare -A agent_info=()
     declare -A pool_info=()
 
-    __action_list_order=(pool server print);
+    __action_list_order=(init pool server print);
 
+    __action_list[init]='initialize agents'
     __action_list[pool]='list of pools or select a pool'
     __action_list[server]='list of servers'
     __action_list[print]='print info'
@@ -2275,6 +2310,11 @@ public::agent(){
         pool_info[id]=?
         reply_msg res="error, aid=NUMBER ?" return=$ERR_EXPR_FAILED \
             show=true newline=false
+    fi
+
+    if [[ $agent_id == 0 ]]; then
+        private::agent_init
+        exit 0
     fi
 
     declare -r agent_config_file=${__agent_path}/${agent_id}.yaml
