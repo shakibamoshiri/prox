@@ -2388,7 +2388,7 @@ public::agent(){
 ################################################################################
 # db
 ################################################################################
-private::data_setup(){
+private::data_init(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
 
@@ -2404,7 +2404,7 @@ private::data_setup(){
         new_path=${db_info[root]}/${agent_info[groupname]}/$table
 
         # private::printf ${args[silent]:-false]} create: ${db_info[root]}/${agent_info[groupname]}/$table
-        private::printf ${args[silent]:-false} "setup $new_path"
+        private::printf ${args[silent]:-false} "init $new_path"
         mkdir -p $new_path
         private::print ${args[silent]:-false} "created"
     done
@@ -2421,7 +2421,7 @@ private::data_setup(){
     declare -r sample_html=${dash_path}/${profile[sample]}
 
     if ! [[ -f $agent_index_html ]]; then
-        private::printf ${args[silent]:-false} "setup $agent_index_html"
+        private::printf ${args[silent]:-false} "init $agent_index_html"
         rsync -az $sample_html $agent_index_html
         private::print ${args[silent]:-false} "created"
     fi
@@ -2429,28 +2429,19 @@ private::data_setup(){
     # declare -r table_configs=${db_info[root]}/${agent_info[groupname]}/${db_info[configs]}
     # declare -r client_sample_file=$__cc_path/${agent_id}.json
 
-    # if ! [[ -f $client_sample_file ]]; then
-    #     private::printf ${args[silent]:-false} "setup $client_sample_file"
-    #     rsync -az client.sample.json $client_sample_file
-    #     private::print ${args[silent]:-false} "created"
-    # else
-    #     private::printf ${args[silent]:-false} "setup $client_sample_file"
-    #     private::print ${args[silent]:-false} "already created"
-    # fi
-
     ### readable name to random names
-    private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_info[realname]}"
+    private::printf ${args[silent]:-false} "init ${db_info[root]}/${agent_info[realname]}"
     rm -f ${db_info[root]}/${agent_info[realname]}
     ln -sf ${agent_info[groupname]} ${db_info[root]}/${agent_info[realname]}
     private::print ${args[silent]:-false} "created"
 
     ### mkfifo with each
-    private::printf ${args[silent]:-false} "setup ${db_info[root]}/${agent_id}"
+    private::printf ${args[silent]:-false} "init ${db_info[root]}/${agent_id}"
     mkfifo ${db_info[root]}/${agent_id} > /dev/null 2>&1 || true
     private::print ${args[silent]:-false} "created"
 
     ### log dir per agent
-    private::printf ${args[silent]:-false} "setup log/$agent_id"
+    private::printf ${args[silent]:-false} "init log/$agent_id"
     mkdir -p $__log_path/${agent_id}
     private::print ${args[silent]:-false} "created"
 
@@ -2670,9 +2661,9 @@ public::data(){
     declare -A agent_info=()
     declare -A pool_info=()
 
-    __action_list_order=(setup info test sync wipe print);
+    __action_list_order=(init info test sync wipe print);
 
-    __action_list[setup]='setup a database'
+    __action_list[init]='initialize database'
     __action_list[info]='info of a database';
     __action_list[test]='test database'
     __action_list[sync]='sync database'
@@ -2768,7 +2759,7 @@ public::data(){
         print )
             echo print
         ;;
-        setup | info | test | sync | wipe )
+        init | info | test | sync | wipe )
             # private::${__fn_name}_${__action} "$@";
 
             declare pfn=${__fn_name}_${__action}
@@ -3221,7 +3212,7 @@ private::app_init(){
     private::app_test show=false
 
     private::title false "\nsetup database:"
-    private::data_setup
+    private::data_init
 
     private::title false "\ncreate a user (user=prox):"
     private::user_create user=prox name=prox
