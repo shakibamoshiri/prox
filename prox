@@ -120,7 +120,7 @@ private::info() {
     fi
 
     if [[ ${silent} == false ]]; then
-        printf "\033[1;34m${*:2}\033[0m"; 
+        printf "\033[1;34m${*:2}\033[0m\n";
     fi
 }
 
@@ -535,7 +535,7 @@ private::user_create(){
 
     if [[ -f $user_data_file ]]; then
         if [[ $renew == false ]]; then
-            reply_msg res="error, user: $username already created, renew=true to renew" \
+            reply_msg res="error, user: $already created, renew=true to renew" \
                 return=$ERR_EXPR_FAILED show=true newline=false
         fi
     else
@@ -3195,7 +3195,9 @@ private::app_test(){
     private::title false "\nservers test:"
     private::app_test_server
 
-    reply_msg res=success show=true newline=true $@
+    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+        reply_msg res=success show=true newline=true $@
+    fi
 }
 
 private::app_init(){
@@ -3208,19 +3210,35 @@ private::app_init(){
         args[$key]="$value";
     done
 
-    private::info false "user app tests\n\n"
-    private::app_test show=false
+    private::info false "### app tests"
+    private::app_test
 
-    private::title false "\nsetup database:"
+    private::info false "\n### data init"
+    private::title false "init database:"
     private::data_init
 
-    private::title false "\ncreate a user (user=prox):"
+    private::info false "\n### user create user=prox"
+    ### check if shadowsocks outbound is found
+    declare client_sample_file=$__cc_path/${agent_id}.json
+    if ! jq -r --exit-status '[.outbounds[].type] | sort | unique | .[] | select(. == "shadowsocks")' $client_sample_file > /dev/null 2>&1; then
+        reply_msg res="error shadowsocks outbound not found in your client config: $client_sample_file" \
+            show=true newline=false return=$ERR_EXPR_FAILED
+    fi
     private::user_create user=prox name=prox
-    
-    private::title false "\nconfigure a user [user=prox force=true]:"
-    private::user_config user=prox force=true
 
-    reply_msg res=success ${@}
+    declare -A profile=()
+    mapfile -t tmp < <(yq '.db.info[] | select(.name=="'${agent_info[groupname]}'") | .profile' $pool_servers_file --output-format props)
+    for line in "${tmp[@]}"; do
+        IFS=\ =\  read key value <<< "$line"
+        profile[$key]="$value";
+    done
+
+    declare -r dash_path=${profile[web_root]}
+    declare -r user_profile_path=${dash_path}/${agent_info[groupname]}/prox
+
+    private::info false "\n### done"
+    private::print false "next, run a web server at ${profile[web_root]}/"
+    private::print false "see local files here: $user_profile_path"
 }
 
 private::app_run(){
