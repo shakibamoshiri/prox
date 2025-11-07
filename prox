@@ -208,6 +208,8 @@ private::color(){
         declare -ir style=38
     elif [[ $mode == bg ]]; then
         declare -ir style=48
+    else
+        cat /dev/stdin
     fi
 
     ### save the input
@@ -1663,7 +1665,14 @@ public::user(){
             declare -r fn_call_result=$__log_path/$agent_id/${pfn}.txt
             ### interactive shell
             if [[ ${args[bot]:-false} == false ]]; then
-                { private::${pfn} "$@"; } |& tee -a $fn_call_result
+                case $pfn in
+                    user_list )
+                        { private::${pfn} "$@"; } |& tee -a $fn_call_result | private::color ${color:-false} deleted=454545 connected=808000
+                    ;;
+                    * )
+                        { private::${pfn} "$@"; } |& tee -a $fn_call_result
+                    ;;
+                esac
             else
                 declare -r fifo=${db_info[root]}/${agent_id}
 
