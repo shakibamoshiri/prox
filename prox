@@ -51,6 +51,7 @@ function __error_handing__(){
 declare -ir ERR_EXPR_FAILED=1;
 declare -ir ERR_FILE_NOT_FOUND=2;
 declare -ir ERR_OPTION_NOT_FOUND=3;
+declare -ir ERR_EXIT_IMD=4;
 declare -ir EXIT_SUCCESS=0;
 declare -ir CLI_PPID=$$;
 
@@ -244,7 +245,7 @@ function reply_msg(){
     declare -r show=${args[show]:-false}
 
     if [[ ${show} == false ]]; then
-        return 0
+        return $EXIT_SUCCESS
     fi
 
     if [[ $newline_flag == true ]]; then
@@ -261,7 +262,11 @@ arn: ${agent_info[realname]:-undefined}"
 
     printf "$final_reply_msg\n"
 
-    return ${return:-0}
+    if (( $return == $ERR_EXIT_IMD )); then
+        exit $ERR_EXIT_IMD
+    else
+        return ${return:-0}
+    fi
 }
 
 ################################################################################
@@ -717,7 +722,6 @@ private::user_delete(){
                 * )
                     reply_msg res="error, select=<local|remote> ?" show=true \
                         return $ERR_EXPR_FAILED
-                        exit $ERR_EXPR_FAILED
                 ;;
             esac
 
@@ -1024,7 +1028,7 @@ private::user_bytes(){
         # reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED \
         # show=true newline=false
         yq ea '. as $item ireduce ({}; . * $item ) | .users[] | { "user": .username, "bytes": (.downlinkBytes + .uplinkBytes), "sessions": (.tcpSessions + .udpSessions) }' $table_servers/*.json | jq::table true
-        exit 0
+        exit $EXIT_SUCCESS
     fi
 
     if ! jq --exit-status '.users[] | select(.username=="'$username'")' $table_servers/*.json > /dev/null 2>&1; then
@@ -1056,13 +1060,13 @@ private::user_notif(){
     declare -r table_bytes=${db_info[root]}/${agent_info[groupname]}/${db_info[bytes]}
 
 if [[ -z $username ]]; then
-    echo "[X] error: user=<string>"
-    exit 1
+    echo "[X] error: user=USERNAME ?"
+    exit $ERR_EXPR_FAILED
 fi
 
 if [[ -z $notif_msg ]]; then
-    echo "[X] error: msg=<string>"
-    exit 1
+    echo "[X] error: msg=MESSAGE ?"
+    exit $ERR_EXPR_FAILED
 fi
 
     private::user_get "$@" | \
@@ -1143,7 +1147,8 @@ private::user_fetch(){
     fi
 
     if ! [[ -f $user_bytes_file ]]; then
-        reply_msg res="error: user=$username not found" return=$ERR_FILE_NOT_FOUND show=true
+        reply_msg res="warning: user=$username not connected yet" return=$ERR_EXPR_FAILED \
+            show=true newline=false
     fi
 
     yq -p json -o yaml '.' $table_bytes/${username}.json
@@ -1164,17 +1169,24 @@ private::user_get(){
     declare -r notif_msg=${args['notif']:-${args['msg']:-${args['m']:-}}}
 
     declare -r table_bytes=${db_info[root]}/${agent_info[groupname]}/${db_info[bytes]}
+    declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
     declare -r table_archive=${db_info[root]}/${agent_info[groupname]}/${db_info[archive]}
     declare -r user_bytes_file=$table_bytes/${username}.json
+    declare -r user_data_file=$table_users/${username}.json
     declare -r server_name=$(hostname)
 
     if [[ -z $username ]]; then
-        reply_msg res='error: user=USERNAME ?' return=$ERR_EXPR_FAILED show=true \
+        reply_msg res='error: user=USERNAME ?' return=$ERR_EXIT_IMD show=true \
             newline=false
     fi
 
+    if ! [[ -f $user_data_file ]]; then
+        reply_msg res="error: user=$username not found" return=$ERR_EXIT_IMD \
+            show=true newline=false
+    fi
+
     if ! [[ -f $user_bytes_file ]]; then
-        reply_msg res="error: user=$username not found" return=$ERR_EXPR_FAILED\
+        reply_msg res="warning: user=$username not connected yet" return=$ERR_EXIT_IMD \
             show=true newline=false
     fi
 
@@ -1229,14 +1241,12 @@ private::user_list(){
     declare -r data_int=$(private::data_int bool)
     if [[ $data_int == false ]]; then
         reply_msg res='error, data integrity failure' \
-            show=true newline=false return=$ERR_EXPR_FAILED
-            exit $ERR_EXPR_FAILED
+            show=true newline=false return=$ERR_EXIT_IMD
     fi
 
     if [[ $data_int == empty ]]; then
         reply_msg res='warning, server data not found to test, run server fetch' \
-            show=true newline=false return=$ERR_EXPR_FAILED
-            exit $ERR_EXPR_FAILED
+            show=true newline=false return=$ERR_EXIT_IMD
     fi
 
     # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
@@ -1247,7 +1257,7 @@ private::user_list(){
 
     if [[ ${#users[@]} == 0 ]]; then
         reply_msg res="no user found to list" show=true newline=false \
-            return=$ERR_EXPR_FAILED
+            return=$ERR_EXIT_IMD
     fi
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
