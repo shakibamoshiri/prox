@@ -517,8 +517,8 @@ private::user_create(){
     declare -r user_gig=${args[gig]:-${pool_info[gig]}}
     declare -r user_day=${args[day]:-${pool_info[day]}}
 
-    declare -r user_realname=${args['name']:-${args['rn']:-}}
-    declare -r profile_name=${args['profile']:-${args['pn']:-${user_realname:-}}}
+    declare -r user_realname=${args['name']:-${args['n']:-}}
+    declare -r profile_name=${args['profile']:-${args['p']:-${user_realname:-}}}
 
     declare -r password=$(openssl rand -base64 16)
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
@@ -531,24 +531,24 @@ private::user_create(){
     ### make sure agent_prefix is not duplicated
     if [[ ${username} =~ ^$agent_prefix ]]; then
         reply_msg res="error, username format is incorrect ${username}" \
-            return=$ERR_EXPR_FAILED show=true newline=false
+            return=$ERR_EXIT_IMD show=true newline=false
     fi
 
     ### the agent path should be created
     if ! [[ -d $table_users/ ]]; then
         reply_msg res='error, users table not found, run db init first' \
-            return=$ERR_EXPR_FAILED show=true newline=false
+            return=$ERR_EXIT_IMD show=true newline=false
     fi
 
     if [[ -f $user_data_file ]]; then
         if [[ $renew == false ]]; then
             reply_msg res="error, user: $already created, renew=true to renew" \
-                return=$ERR_EXPR_FAILED show=true newline=false
+                return=$ERR_EXIT_IMD show=true newline=false
         fi
     else
         if [[ -z $user_realname ]]; then
             reply_msg res='error, name of the new user?, name=NAME' \
-                return=$ERR_EXPR_FAILED show=true newline=false
+                return=$ERR_EXIT_IMD show=true newline=false
         fi
     fi
 
