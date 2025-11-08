@@ -1688,7 +1688,7 @@ public::user(){
                 declare -ir file_size=$(stat -c %s $doc_file)
                 if (( file_size < 4096 )); then
                     case $pfn in
-                        user_create )
+                        user_create | user_page )
                         cat $doc_file | tee -a $fn_call_result | private::telegram_msg aid=$agent_id silent=true > /dev/null 2>&1
                         ;;
                         * )
