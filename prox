@@ -527,6 +527,8 @@ private::user_create(){
     declare old_password=""
     declare old_realname=""
 
+    : ${args[stop]:+${args[nothing]:?stop here at $LINENO}}
+
 
     ### make sure agent_prefix is not duplicated
     if [[ ${username} =~ ^$agent_prefix ]]; then
@@ -653,9 +655,9 @@ private::user_create(){
     fi
 
     ### generate new configs
-    private::user_config aid=$agent_id user=$username method=local show=false force=true "$@"
-    private::user_config aid=$agent_id user=$username method=link show=false "$@"
-    private::user_config aid=$agent_id user=$username method=link type=qr show=false "$@"
+    private::user_config aid=$agent_id user=$username name=$user_realname method=local show=false force=true "$@"
+    private::user_config aid=$agent_id user=$username name=$user_realname method=link show=false "$@"
+    private::user_config aid=$agent_id user=$username name=$user_realname method=link type=qr show=false "$@"
 
     jq::user_init user=$username | \
     jq 'del(.name)' | \
@@ -779,8 +781,8 @@ private::user_config(){
 
     declare -r username=${args['user']:-}
     declare -r force=${args['force']:-false}
-    declare -r user_realname=${args['name']:-${args['rn']:-}}
-    declare -r profile_name=${args['profile']:-${args['pn']:-${user_realname:-}}}
+    declare -r user_realname=${args['name']:-${args['n']:-}}
+    declare -r profile_name=${args['profile']:-${args['p']:-${user_realname:-}}}
 
 
     declare -r type=${args['type']:-json}
