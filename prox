@@ -427,33 +427,24 @@ jq::user_update(){
 
     private::user_stat user=$user caller=$fn_name | \
     jq '
-        ($log[0]) as $log |
-        ((now|floor)-$log.ctime) as $second_used |
-        ((((now|floor)-$log.ctime)/(24*60*60))|floor)  as $day_used |
+        .bytes as $bytes |
+        .sessions as $sessions |
+        ($data[0]) as $data |
+        ((now|floor)-$data.ctime) as $second_used |
+        ((((now|floor)-$data.ctime)/(24*60*60))|floor) as $day_used |
         (.bytes / (if ($day_used==0) then 1 else $day_used end)) as $pday |
 
-    {
-        user: .user,
-        name: .name,
-        sessions: .sessions,
-        ctime: $log.ctime,
-        atime: (now|floor),
-        etime: $log.etime,
-        bytes: {
-            base: $log.bytes.base,
-            used: .bytes,
-            pday: $pday,
-            limit: (.bytes > $log.bytes.base)
-        },
-        seconds: {
-            base: $log.seconds.base,
-            used: $second_used,
-            limit: ($second_used > $log.seconds.base)
-        }
-     }
-    ' --slurpfile log $user_bytes_file | \
-    sponge $user_bytes_file
-    echo 'updated'
+        $data |
+
+        .sessions = $sessions |
+        .atime = (now|floor) |
+        .bytes.used = $bytes |
+        .bytes.pday = $pday |
+        .seconds.used = $second_used
+
+    ' --slurpfile data $user_bytes_file | \
+        sponge $user_bytes_file
+        echo 'updated'
 
     ### generate a static page for it
     declare -A profile=()
@@ -1362,17 +1353,19 @@ private::user_limit(){
     
     ## mapfile -t online_users < <(jq -r '.users[] | .username' $table_servers/*.json | sort | uniq)
     mapfile -t online_users < <(yq -r eval-all '[.users[] | select((.tcpSessions + .tcpSessions) > 0) | .username] | unique | sort | .[]' $table_servers/*.json)
+    declare msg=""
     for user in ${online_users[@]}; do
         ## declare -i user_bytes=$(private::user_bytes user=$user)
         ## if (( user_bytes == 0 )); then
         ##     continue
         ## else
+            msg=""
             private::printf ${args[silent]:-false} "${fn_name/_/ } $user"
             
             ### traffic check
             bytes_used=$(jq '.bytes.used >= .bytes.base' < $table_bytes/${user}.json)
             if [[ $bytes_used == true ]]; then
-                declare -r msg="traffic-finished, deleting user"
+                msg="traffic-finished, deleting user"
                 private::warn ${args[silent]:-false} "$msg ... "
 
                 private::user_delete  user=$user silent=true
@@ -1389,7 +1382,7 @@ private::user_limit(){
 
             bytes_in24=$(jq '.bytes.used >= (.bytes.base - 1e9)' < $table_bytes/${user}.json)
             if [[ $bytes_in24 == true ]]; then
-                declare -r msg="traffic-limiting in 24h"
+                msg="traffic-limiting in 24h"
                 bytes_limit=$(jq '.bytes.limit' < $table_bytes/${user}.json)
                 if [[ $bytes_limit == false ]]; then
                     private::warn ${args[silent]:-false} "$msg\n"
@@ -1405,9 +1398,9 @@ private::user_limit(){
             fi
 
             ### expiration check
-            seconds_used=$(jq '.seconds.used >= .seconds.base' < $table_bytes/${user}.json)
+            seconds_used=$(jq '((now|floor) - .ctime) >= .seconds.base' < $table_bytes/${user}.json)
             if [[ $seconds_used == true ]]; then
-                declare -r msg="date-expired, deleting user"
+                msg="date-expired, deleting user"
                 private::warn ${args[silent]:-false} "$msg ... "
 
                 private::user_delete  user=$user silent=true
@@ -1422,9 +1415,9 @@ private::user_limit(){
                 continue
             fi
 
-            seconds_in24=$(jq '.seconds.used >= (.seconds.base - (24 * 60 * 60))' < $table_bytes/${user}.json)
+            seconds_in24=$(jq '((now|floor) - .ctime) >= (.seconds.base - (24 * 60 * 60))' < $table_bytes/${user}.json)
             if [[ $seconds_in24 == true ]]; then
-                declare -r msg='date-expiring in 24h'
+                msg='date-expiring in 24h'
                 seconds_limit=$(jq '.seconds.limit' < $table_bytes/${user}.json)
                 if [[ $seconds_limit == false ]]; then
                     private::warn ${args[silent]:-false} "$msg\n"
