@@ -861,12 +861,19 @@ private::user_config(){
         fi
     fi
 
-    if [[ $method == local ]]; then
+    if [[ $pass_tls != null ]] && [[ $pass_ss != null ]]; then
         ### create the configuration file
         jq -c '
         (.outbounds[] | select(.type=="shadowsocks") | .password) = "'"$pass_user_final"'" |
         (.outbounds[] | select(.type=="shadowtls") | .password) = "'"${pass_tls}"'"
-        ' < $client_sample_file > $user_config_file
+        ' < $client_sample_file | sponge $user_config_file
+    elif [[ $pass_ss != null ]]; then
+        jq -c '
+        (.outbounds[] | select(.type=="shadowsocks") | .password) = "'"$pass_user_final"'"
+        ' < $client_sample_file | sponge $user_config_file
+    else
+        reply_msg res="error shadowsocks password is not valid" show=true \
+            newline=true return=$ERR_EXIT_IMD
     fi
 
     if [[ $type == json ]]; then
