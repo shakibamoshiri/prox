@@ -11,6 +11,7 @@ and out-of-box features like
 - multi-pools
 - multi-nodes
 - multi-agents (superadmin + other admins)
+- RBAC (different access per admins)
 - minimal and static dashboard pre user for stat and subscription
     - [not-connected-yet](https://9ced979b4f.pages.dev/admin/ncy/)
     - [connected](https://9ced979b4f.pages.dev/admin/con/)
