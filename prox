@@ -549,7 +549,7 @@ private::user_create(){
 
     if [[ -f $user_data_file ]]; then
         if [[ $renew == false ]]; then
-            reply_msg res="error, user: $already created, renew=true to renew" \
+            reply_msg res="error, user=$username already created, renew=true to renew" \
                 return=$ERR_EXIT_IMD show=true newline=false
         fi
     else
@@ -3223,8 +3223,9 @@ private::app_test_server() {
 }
 
 private::app_test(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    declare -r fn_caller=${FUNCNAME[1]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3246,7 +3247,7 @@ private::app_test(){
     private::title false "\nservers test:"
     private::app_test_server
 
-    if [[ ${#FUNCNAME[@]} == 4 ]]; then
+    if [[ $fn_name == app_test ]]; then
         reply_msg res=success show=true newline=true $@
     fi
 }
