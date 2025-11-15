@@ -256,13 +256,27 @@ function reply_msg(){
         declare -r newline=""
     fi
 
+
+    declare -r final_reply_msg_i="${newline}\
+res: $result
+aid: ${agent_info[id]:-undefined}
+pid: ${pool_info[id]:-undefined}
+arn: ${agent_info[realname]:-undefined}
+usr: ${username:-${user:-undefined}}"
+
     declare -r final_reply_msg="${newline}\
 res: $result
 aid: ${agent_info[id]:-undefined}
 pid: ${pool_info[id]:-undefined}
-arn: ${agent_info[realname]:-undefined}"
+arn: ${agent_info[realname]:-undefined}
+usr: <code>${username:-${user:-undefined}}</code>"
 
-    printf "$final_reply_msg\n"
+
+    if [[ -t 0 ]]; then
+        printf "$final_reply_msg_i\n"
+    else
+        printf "$final_reply_msg\n"
+    fi
 
     if (( $return == $ERR_EXIT_IMD )); then
         exit $ERR_EXIT_IMD
