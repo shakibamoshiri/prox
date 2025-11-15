@@ -1737,7 +1737,8 @@ private::server_check(){
         IFS== read key value <<< "$pram"
         args[$key]="$value";
     done
-    declare -a server_ids=()
+    declare -a server_ids=() \
+               checked=""
 
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     {
@@ -1753,12 +1754,12 @@ private::server_check(){
             
             private::printf ${args[silent]:-false} "${fn_name/_/ } ${server_info[location]}"
 
-            declare fetched=$(private::server_test)
-            if [[ $(private::server_test) == true ]]; then
+            checked=$(private::server_test)
+            if [[ $checked == true ]]; then
                 private::print ${args[silent]:-false} "checked"
             fi
 
-            if [[ $(private::server_test) == false ]]; then
+            if [[ $checked == false ]]; then
                 private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
                 if [[ ${args[force]:-false} == false ]]; then
@@ -1859,6 +1860,9 @@ private::server_fetch(){
     ### probably a single server_check function to check every server well called
     # private::server_check silent=true force=${args[force]:-false}
 
+    declare -a server_ids=() \
+               fetched=""
+
     mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
     {
         # private::title ${args[silent]:-false} "id location address result"
@@ -1875,8 +1879,8 @@ private::server_fetch(){
 
             private::printf ${args[silent]:-false} "${fn_name/_/ } ${server_info[location]}"
 
-            declare fetched=$(private::server_test)
-            if [[ $(private::server_test) == true ]]; then
+            fetched=$(private::server_test)
+            if [[ $fetched == true ]]; then
                 curl --silent --request GET --url http://${ssm_api_addr}/server/v1/stats | \
                     jq '.server_id = '$sid' | .ssm_api = "'$ssm_api_addr'" | .server_loc = "'${server_info[location]}'"' | \
                     jq '.users[] |=  select(.username | test("^'${agent_prefix}'")) | .users[].username |= sub("'${agent_prefix}'"; "") | (.users[].agent_id |= '$agent_id')' |
@@ -1884,7 +1888,7 @@ private::server_fetch(){
                 private::print ${args[silent]:-false} "fetched"
             fi
 
-            if [[ $(private::server_test) == false ]]; then
+            if [[ $fetched == false ]]; then
                 private::print ${args[silent]:-false} "failure $ssm_api_addr"
 
                 if [[ ${args[force]:-false} == false ]]; then
