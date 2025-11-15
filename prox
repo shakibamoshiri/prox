@@ -806,6 +806,111 @@ private::user_renew(){
     private::user_create user=$user name=$user_realname renew=true
 }
 
+private::user_lock(){
+    declare -r fn_name=${FUNCNAME##*:};
+    private::debug $LINENO $FUNCNAME ;
+
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+
+    declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
+    declare -r username=${args[user]:-}
+    declare -r ss_username="${agent_prefix}${username}"
+    declare -r name=${args[name]:-}
+    declare -r user_data_file=$table_users/${username}.json
+
+    if [[ -z $username ]]; then
+        reply_msg res="error, a user=USERNAME to lock?" show=true \
+            return=$ERR_EXIT_IMD newline=false
+    fi
+
+    if ! [[ -f $user_data_file ]]; then
+        reply_msg res="error, user=$username info not found" \
+            return=$ERR_EXIT_IMD show=true newline=false
+    fi
+
+    ### iterate over all servers
+    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    declare -A server_info=()
+    declare -r random_password=$(openssl rand -base64 16)
+    declare -r old_password=$(jq -r '.uPSK' < $user_data_file)
+
+    # private::title ${args[silent]:-false} "id location username result"
+    for sid in "${server_ids[@]}"; do
+        mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
+        for line in "${props[@]}"; do
+            IFS=\ =\  read key value <<< "$line"
+            server_info[$key]="$value";
+        done
+        ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
+
+        ### check if used already created or not
+        if ! curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
+            reply_msg res="error, user=$username not found alive" \
+                return=$ERR_EXIT_IMD show=true newline=false
+        fi
+
+        private::printf ${args[silent]:-false} "lock $username"
+        curl --silent --request PUT --url http://${ssm_api_addr}/server/v1/users/$ss_username --data '{ "uPSK": "'${random_password}'" }'
+        private::print ${args[silent]:-false} "locked [${server_info[location]}]";
+    done
+}
+
+private::user_unlock(){
+    declare -r fn_name=${FUNCNAME##*:};
+    private::debug $LINENO $FUNCNAME ;
+
+    declare -A args
+    for pram in "${@}"; do
+        IFS== read key value <<< "$pram"
+        args[$key]="$value";
+    done
+
+    declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
+    declare -r username=${args[user]:-}
+    declare -r ss_username="${agent_prefix}${username}"
+    declare -r name=${args[name]:-}
+    declare -r user_data_file=$table_users/${username}.json
+
+    if [[ -z $username ]]; then
+        reply_msg res="error, a user=USERNAME to unlock?" show=true \
+            return=$ERR_EXIT_IMD newline=false
+    fi
+
+    if ! [[ -f $user_data_file ]]; then
+        reply_msg res="error, user=$username info not found" \
+            return=$ERR_EXIT_IMD show=true newline=false
+    fi
+
+    ### iterate over all servers
+    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    declare -A server_info=()
+    declare -r old_password=$(jq -r '.uPSK' < $user_data_file)
+
+    # private::title ${args[silent]:-false} "id location username result"
+    for sid in "${server_ids[@]}"; do
+        mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
+        for line in "${props[@]}"; do
+            IFS=\ =\  read key value <<< "$line"
+            server_info[$key]="$value";
+        done
+        ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
+
+        ### check if used already created or not
+        if ! curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users/$ss_username | jq --exit-status '.username=="'$ss_username'"' > /dev/null 2>&1; then
+            reply_msg res="error, user=$username not found alive on $ssm_api_addr" \
+                return=$ERR_EXIT_IMD show=true newline=false
+        fi
+
+        private::printf ${args[silent]:-false} "unlock $username"
+        curl --silent --request PUT --url http://${ssm_api_addr}/server/v1/users/$ss_username --data '{ "uPSK": "'${old_password}'" }'
+        private::print ${args[silent]:-false} "unlocked [${server_info[location]}]";
+    done
+}
+
 private::user_config(){
     declare -r fn_name=${FUNCNAME##*:};
     private::debug $LINENO $FUNCNAME ;
@@ -1590,11 +1695,13 @@ public::user(){
     declare -A agent_info=()
     declare -A pool_info=()
 
-    __action_list_order=(create delete renew config stat bytes init fetch get list page notif archive limit remove print);
+    __action_list_order=(create delete renew lock unlock config stat bytes init fetch get list page notif archive limit remove print);
 
     __action_list[create]='create a new user'
     __action_list[delete]='delete a user (server)'
     __action_list[renew]='renew a user';
+    __action_list[lock]='lock a user';
+    __action_list[unlock]='unlock a user';
     __action_list[config]='get an app configuration';
     __action_list[stat]='stat of a user';
     __action_list[bytes]='sum of bytes of a user';
@@ -1708,7 +1815,7 @@ public::user(){
         print )
             echo print
         ;;
-        create | delete | renew | config | stat | bytes | init | fetch | get | list | page | notif | archive | limit | remove  )
+        create | delete | renew | lock | unlock | config | stat | bytes | init | fetch | get | list | page | notif | archive | limit | remove  )
             # private::${__fn_name}_${__action} "$@";
             declare pfn=${__fn_name}_${__action}
             declare -r fn_call_result=$__log_path/$agent_id/${pfn}.txt
