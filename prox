@@ -57,7 +57,7 @@ declare -ir CLI_PPID=$$;
 
 declare -r PS4='debug($LINENO) ${FUNCNAME[0]:+${FUNCNAME[0]}}(): ';
 declare -r CLI_NAME='prox';
-declare -r CLI_VERSION='0.9.8';
+declare -r CLI_VERSION='0.9.9';
 declare -r CLI_SOURCE_LINK='https://github.com/shakibamoshiri/prox';
 declare -r CLI_INSTALL_PATH='/usr/local/bin';
 declare -r PRINTF_HELP_OFFSET=20;
@@ -110,8 +110,8 @@ declare -r __cc_path=".${CLI_NAME}/cc";
 # utilities
 ################################################################################
 private::info() { 
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -126,8 +126,8 @@ private::info() {
 }
 
 private::warn() { 
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -142,8 +142,8 @@ private::warn() {
 }
 
 private::error(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -158,8 +158,8 @@ private::error(){
 }
 
 private::title(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -176,8 +176,8 @@ private::title(){
 }
 
 private::print() { 
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -189,8 +189,8 @@ private::print() {
 }
 
 private::printf(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r silent=${1:-false}
 
@@ -200,8 +200,8 @@ private::printf(){
 }
 
 private::color(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -r mode=${1}
     if [[ $mode == fg ]]; then
@@ -421,8 +421,8 @@ jq::user_init(){
 }
 
 jq::user_update(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args=();
     for pram in "${@}"; do
@@ -502,8 +502,8 @@ jq::user_update(){
 # user command
 ################################################################################
 private::user_create(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -675,8 +675,8 @@ private::user_create(){
 }
 
 private::user_delete(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -774,8 +774,8 @@ private::user_delete(){
 }
 
 private::user_renew(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -807,8 +807,8 @@ private::user_renew(){
 }
 
 private::user_lock(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -857,11 +857,13 @@ private::user_lock(){
         curl --silent --request PUT --url http://${ssm_api_addr}/server/v1/users/$ss_username --data '{ "uPSK": "'${random_password}'" }'
         private::print ${args[silent]:-false} "locked [${server_info[location]}]";
     done
+
+    reply_msg res=success show=true newline=${args[silent]:+false}
 }
 
 private::user_unlock(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -909,11 +911,13 @@ private::user_unlock(){
         curl --silent --request PUT --url http://${ssm_api_addr}/server/v1/users/$ss_username --data '{ "uPSK": "'${old_password}'" }'
         private::print ${args[silent]:-false} "unlocked [${server_info[location]}]";
     done
+
+    reply_msg res=success show=true newline=${args[silent]:+false}
 }
 
 private::user_config(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1100,8 +1104,8 @@ private::user_config(){
 }
 
 private::user_stat(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1164,8 +1168,8 @@ private::user_stat(){
 }
 
 private::user_bytes(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1198,8 +1202,8 @@ private::user_bytes(){
 }
 
 private::user_notif(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]} ;
 
     declare -A args
     for pram in "${@}"; do
@@ -1236,8 +1240,8 @@ fi
 }
 
 private::user_init(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1282,8 +1286,8 @@ private::user_init(){
 }
 
 private::user_fetch(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1310,8 +1314,8 @@ private::user_fetch(){
     reply_msg res=success ${@}
 }
 private::user_get(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1381,9 +1385,8 @@ yq -p json -o yaml
 }
 
 private::user_list(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
-    private::debug $LINENO "args: ${@}";
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1442,8 +1445,8 @@ private::user_list(){
 }
 
 private::user_archive(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1486,8 +1489,8 @@ private::user_archive(){
 }
 
 private::user_limit(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1600,8 +1603,8 @@ private::user_limit(){
 }
 
 private::user_page(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1654,8 +1657,8 @@ private::user_page(){
 }
 
 private::user_remove(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1685,8 +1688,8 @@ private::user_remove(){
 }
 
 public::user(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -1857,8 +1860,8 @@ public::user(){
             fi
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED \
-                show=true newline==
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
@@ -1868,9 +1871,8 @@ public::user(){
 # server command
 ################################################################################
 private::server_check(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
-    private::debug $LINENO "args: ${@}";
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1939,9 +1941,8 @@ private::server_check(){
 }
 
 private::server_list(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
-    private::debug $LINENO "args: ${@}";
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -1983,9 +1984,8 @@ private::server_list(){
 }
 
 private::server_fetch(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
-    private::debug $LINENO "args: ${@}";
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2049,9 +2049,8 @@ private::server_fetch(){
 }
 
 private::server_stat(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
-    private::debug $LINENO "args: ${@}";
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2183,8 +2182,8 @@ private::server_test(){
 }
 
 public::server(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -2329,7 +2328,8 @@ public::server(){
         ;;
 
         * )
-            reply_msg res="error, action $__action not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
@@ -2338,8 +2338,8 @@ public::server(){
 # agent command
 ################################################################################
 private::agent_init(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2372,8 +2372,8 @@ private::agent_init(){
 }
 
 private::agent_pool(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2415,8 +2415,8 @@ private::agent_pool(){
 }
 
 private::agent_server(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
     
     declare -r new_pool_id=${args['pid']:-}
     declare -r active_pool_id=${new_pool_id:-${agent_info[pool_id]}}
@@ -2454,8 +2454,8 @@ private::agent_server(){
 
 
 public::agent(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -2568,7 +2568,8 @@ public::agent(){
             private::${__fn_name}_${__action} "$@";
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
@@ -2578,8 +2579,8 @@ public::agent(){
 # db
 ################################################################################
 private::data_init(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2638,8 +2639,8 @@ private::data_init(){
 }
 
 private::data_info(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2654,8 +2655,8 @@ private::data_info(){
 }
 
 private::data_test(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2684,8 +2685,8 @@ private::data_test(){
 }
 
 private::data_int(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -r type=${1:-string}
     declare -r table_servers=${db_info[root]}/${agent_info[groupname]}/${db_info[servers]}
@@ -2715,8 +2716,8 @@ private::data_int(){
 }
 
 private::data_sync(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2803,8 +2804,8 @@ private::data_sync(){
 }
 
 private::data_wipe(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -2846,8 +2847,8 @@ private::data_wipe(){
 # db command
 ################################################################################
 public::data(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -2983,7 +2984,8 @@ public::data(){
             fi
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
@@ -2993,8 +2995,8 @@ public::data(){
 # telegram command
 ################################################################################
 private::telegram_msg(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3066,8 +3068,8 @@ private::telegram_msg(){
 }
 
 private::telegram_doc(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3127,8 +3129,8 @@ private::telegram_doc(){
 }
 
 private::telegram_test(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3146,8 +3148,8 @@ private::telegram_test(){
 
 
 public::telegram(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -3255,7 +3257,8 @@ public::telegram(){
             private::${__fn_name}_${__action} "$@";
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
@@ -3397,8 +3400,8 @@ private::app_test(){
 }
 
 private::app_init(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3438,8 +3441,8 @@ private::app_init(){
 }
 
 private::app_run(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3481,8 +3484,8 @@ private::app_run(){
 }
 
 private::app_reset(){
-    declare -r fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A args
     for pram in "${@}"; do
@@ -3505,8 +3508,8 @@ private::app_reset(){
 
 
 public::app(){
-    declare -r __fn_name=${FUNCNAME##*:};
-    private::debug $LINENO $FUNCNAME ;
+    declare -r __fn_name=${FUNCNAME[0]##*:};
+    private::debug $LINENO ${FUNCNAME[@]};
 
     declare -A __action_list;
     declare -a __action_list_order;
@@ -3637,7 +3640,8 @@ public::app(){
             fi
         ;;
         * )
-            reply_msg res="$__fn_name $__action, not found" return=$ERR_EXPR_FAILED show=true
+            reply_msg res="action [$__fn_name $__action], not found" return=$ERR_EXPR_FAILED \
+                show=true newline=false
         ;;
     esac
 }
