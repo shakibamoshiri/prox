@@ -57,7 +57,7 @@ declare -ir CLI_PPID=$$;
 
 declare -r PS4='debug($LINENO) ${FUNCNAME[0]:+${FUNCNAME[0]}}(): ';
 declare -r CLI_NAME='prox';
-declare -r CLI_VERSION='0.9.9';
+declare -r CLI_VERSION='0.9.10';
 declare -r CLI_SOURCE_LINK='https://github.com/shakibamoshiri/prox';
 declare -r CLI_INSTALL_PATH='/usr/local/bin';
 declare -r PRINTF_HELP_OFFSET=20;
@@ -591,7 +591,7 @@ private::user_create(){
     declare -r user_qr_png=${profile_random}.png
 
     ### iterate over all servers
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     declare -A server_info=()
 
     # private::title ${args[silent]:-false} "id location username result"
@@ -696,7 +696,7 @@ private::user_delete(){
         reply_msg res='error, user=USERNAME ?' return=$ERR_EXPR_FAILED show=true newline=false
     fi
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     declare -A server_info=()
 
     for sid in "${server_ids[@]}"; do
@@ -833,7 +833,7 @@ private::user_lock(){
     fi
 
     ### iterate over all servers
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     declare -A server_info=()
     declare -r random_password=$(openssl rand -base64 16)
     declare -r old_password=$(jq -r '.uPSK' < $user_data_file)
@@ -888,7 +888,7 @@ private::user_unlock(){
     fi
 
     ### iterate over all servers
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     declare -A server_info=()
     declare -r old_password=$(jq -r '.uPSK' < $user_data_file)
 
@@ -1406,7 +1406,7 @@ private::user_list(){
             show=true newline=false return=$ERR_EXIT_IMD
     fi
 
-    # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    # mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     # declare -r random_serve_id=$((RANDOM % ${#server_ids[@]}))
 
     declare -r table_users=${db_info[root]}/${agent_info[groupname]}/${db_info[users]}
@@ -1417,7 +1417,7 @@ private::user_list(){
             return=$ERR_EXIT_IMD
     fi
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     declare -r random_serve_id=$((RANDOM % ${#server_ids[@]}))
 
     for sid in "${server_ids[$random_serve_id]}"; do
@@ -1882,7 +1882,7 @@ private::server_check(){
     declare -a server_ids=() \
                checked=""
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     {
         # private::title ${args[silent]:-false} "id location address status"
         for sid in "${server_ids[@]}"; do
@@ -1959,7 +1959,7 @@ private::server_list(){
     # jq::table true
 
     ### bash solution
-    # mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    # mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     # {
     #     private::title ${args[silent]:-false} "id location address port"
     #     for sid in "${server_ids[@]}"; do
@@ -2003,7 +2003,7 @@ private::server_fetch(){
     declare -a server_ids=() \
                fetched=""
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     {
         # private::title ${args[silent]:-false} "id location address result"
         for sid in "${server_ids[@]}"; do
@@ -2064,7 +2064,7 @@ private::server_stat(){
     declare -i server_id=${args['sid']:--1}
     declare -a server_ids=()
 
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
 
     if (( $server_id != -1 )); then
         server_ids=($server_id)
@@ -3348,7 +3348,7 @@ private::app_test_file() {
 }
 
 private::app_test_server() {
-    mapfile -t server_ids < <(yq ".servers[].id" $pool_servers_file --output-format props)
+    mapfile -t server_ids < <(yq ".servers[] | select(.active==true) | .id" $pool_servers_file --output-format props)
     for sid in "${server_ids[@]}"; do
         mapfile -t props < <(yq ".servers[$(($sid-1))]" $pool_servers_file --output-format props)
         declare -A server_info=()
