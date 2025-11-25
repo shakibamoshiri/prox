@@ -213,21 +213,25 @@ private::color(){
     fi
 
     ### save the input
-    sponge /tmp/bc.txt
+    sponge $__tmp_path/bc.txt
 
     for args in ${@}; do
         IFS== read match color <<< "$args"
+
+        if [[ ${#color} -lt 6 ]]; then
+            reply_msg res="error, color code should be 6 value hex: [000000-ffffff]"
+        fi
         while read line; do
             if [[ "$line" =~ $match ]]; then
                 echo -e "\033[$style;2;$((16#${color:0:2}));$((16#${color:2:2}));$((16#${color:4:2}))m$line\033[m"
             else
                 echo "$line"
             fi
-        done < /tmp/bc.txt | sponge /tmp/bc.txt
+        done < $__tmp_path/bc.txt | sponge $__tmp_path/bc.txt
     done
 
     ### print the result
-    cat /tmp/bc.txt
+    cat $__tmp_path/bc.txt
 }
 
 function reply_msg(){
@@ -1942,7 +1946,7 @@ public::user(){
             if [[ ${args[bot]:-false} == false ]]; then
                 case $pfn in
                     user_list )
-                        { private::${pfn} "$@"; } |& tee -a $fn_call_result | private::color ${color:-false} ${match:-deleted}=454545
+                        { private::${pfn} "$@"; } |& tee -a $fn_call_result | private::color ${color:-false} ${match:-deleted}=${code:-454545}
                     ;;
                     * )
                         { private::${pfn} "$@"; } |& tee -a $fn_call_result
