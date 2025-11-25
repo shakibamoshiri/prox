@@ -1542,23 +1542,6 @@ private::user_limit(){
                 continue
             fi
 
-            bytes_in24=$(jq '.bytes.used >= (.bytes.base - 1e9)' < $table_bytes/${user}.json)
-            if [[ $bytes_in24 == true ]]; then
-                msg="traffic-limiting in 24h"
-                bytes_limit=$(jq '.bytes.limit' < $table_bytes/${user}.json)
-                if [[ $bytes_limit == false ]]; then
-                    private::warn ${args[silent]:-false} "$msg\n"
-                    jq '.bytes.limit=true' < $table_bytes/${user}.json | \
-                    sponge $table_bytes/${user}.json
-
-                    ### notify
-                    echo "cd $PWD && ${0} user notif user=$user aid=$agent_id msg='$msg'" | at now +1 minute > /dev/null 2>&1
-                else 
-                    private::warn ${args[silent]:-false} "has been notifid, $msg\n"
-                fi
-                continue
-            fi
-
             ### expiration check
             seconds_used=$(jq '((now|floor) - .ctime) >= .seconds.base' < $table_bytes/${user}.json)
             if [[ $seconds_used == true ]]; then
@@ -1574,6 +1557,23 @@ private::user_limit(){
                 ### notify
                 echo "cd $PWD && ${0} user notif user=$user aid=$agent_id msg='$msg'" | at now +1 minute > /dev/null 2>&1
 
+                continue
+            fi
+
+            bytes_in24=$(jq '.bytes.used >= (.bytes.base - 1e9)' < $table_bytes/${user}.json)
+            if [[ $bytes_in24 == true ]]; then
+                msg="traffic-limiting in 24h"
+                bytes_limit=$(jq '.bytes.limit' < $table_bytes/${user}.json)
+                if [[ $bytes_limit == false ]]; then
+                    private::warn ${args[silent]:-false} "$msg\n"
+                    jq '.bytes.limit=true' < $table_bytes/${user}.json | \
+                    sponge $table_bytes/${user}.json
+
+                    ### notify
+                    echo "cd $PWD && ${0} user notif user=$user aid=$agent_id msg='$msg'" | at now +1 minute > /dev/null 2>&1
+                else
+                    private::warn ${args[silent]:-false} "has been notifid, $msg\n"
+                fi
                 continue
             fi
 
@@ -1826,7 +1826,7 @@ public::user(){
             if [[ ${args[bot]:-false} == false ]]; then
                 case $pfn in
                     user_list )
-                        { private::${pfn} "$@"; } |& tee -a $fn_call_result | private::color ${color:-false} deleted=454545 connected=808000
+                        { private::${pfn} "$@"; } |& tee -a $fn_call_result | private::color ${color:-false} ${match:-deleted}=454545
                     ;;
                     * )
                         { private::${pfn} "$@"; } |& tee -a $fn_call_result
@@ -1847,7 +1847,7 @@ public::user(){
                 declare -ir file_size=$(stat -c %s $doc_file)
                 if (( file_size < 4096 )); then
                     case $pfn in
-                        user_create | user_page )
+                        user_create | user_page | user_renew )
                         cat $doc_file | tee -a $fn_call_result | private::telegram_msg aid=$agent_id silent=true > /dev/null 2>&1
                         ;;
                         * )
