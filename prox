@@ -3423,7 +3423,7 @@ private::app_test_cmd() {
 }
 
 private::app_test_dir() {
-    declare -a dirs=(.prox/agent .prox/pool .prox/log .prox/tmp);
+    declare -a dirs=($__pool_path $__agent_path $__log_path $__tmp_path $__cc_path);
 
     for dir in ${dirs[@]}; do
         if [[ -d $dir ]]; then
