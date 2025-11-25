@@ -57,7 +57,7 @@ declare -ir CLI_PPID=$$;
 
 declare -r PS4='debug($LINENO) ${FUNCNAME[0]:+${FUNCNAME[0]}}(): ';
 declare -r CLI_NAME='prox';
-declare -r CLI_VERSION='0.9.10';
+declare -r CLI_VERSION='0.10.0';
 declare -r CLI_SOURCE_LINK='https://github.com/shakibamoshiri/prox';
 declare -r CLI_INSTALL_PATH='/usr/local/bin';
 declare -r PRINTF_HELP_OFFSET=20;
@@ -396,8 +396,8 @@ jq::user_init(){
     declare -r user=${args[user]:-undefined};
 
     jq --null-input '
-        ($config[0].day * 24 * 60 * 60) as $duration |
-        ($config[0].gig * 1024 * 1024 * 1024) as $base |
+        ($config[0].traffic | tonumber) as $bytes |
+        ($config[0].period | tonumber) as $seconds |
 
     {
         user: $config[0].username,
@@ -405,15 +405,15 @@ jq::user_init(){
         sessions: 0,
         ctime: (now|floor),
         atime: 0,
-        etime: ((now|floor)+$duration),
+        etime: ((now|floor)+$seconds),
         bytes: {
-            base: $base,
+            base: $bytes,
             used: 0,
             pday: 0,
             limit: false
         },
         seconds: {
-            base: $duration,
+            base: $seconds,
             used: 0,
             limit: false
         }
@@ -519,8 +519,8 @@ private::user_create(){
 
     declare -r username=${args['user']:-${username_random}}
     declare -r ss_username="${agent_prefix}${username}"
-    declare -r user_gig=${args[gig]:-${pool_info[gig]}}
-    declare -r user_day=${args[day]:-${pool_info[day]}}
+    declare -r user_traffic=${args[traffic]:-${pool_info[traffic]}}
+    declare -r user_period=${args[period]:-${pool_info[period]}}
 
     declare -r user_realname=${args['name']:-${args['n']:-}}
     declare -r profile_name=${args['profile']:-${args['p']:-${user_realname:-}}}
@@ -531,6 +531,41 @@ private::user_create(){
 
     declare old_password=""
     declare old_realname=""
+    declare -i period_second=0
+    declare -i traffic_bytes=0
+
+
+    declare -r user_period_unit=${user_period: -1}
+    declare -r user_traffic_unit=${user_traffic: -1}
+
+    case $user_period_unit in
+        h )
+            period_second=$(( ${user_period//[a-z]/} * 60 * 60 ))
+        ;;
+        m )
+            period_second=$(( ${user_period//[a-z]/} * 60 ))
+        ;;
+        s )
+            period_second=${user_period//[a-z]/}
+        ;;
+        * )
+            period_second=$(( ${user_period//[a-z]/} * 24 * 60 * 60 ))
+        ;;
+    esac
+    case $user_traffic_unit in
+        m )
+            traffic_bytes=$(( ${user_traffic//[a-z]/} * 1024 * 1024 ))
+        ;;
+        k )
+            traffic_bytes=$(( ${user_traffic//[a-z]/} * 1024 ))
+        ;;
+        b )
+            traffic_bytes=${user_traffic//[a-z]/}
+        ;;
+        * )
+            traffic_bytes=$(( ${user_traffic//[a-z]/} * 1024 * 1024 * 1024 ))
+        ;;
+    esac
 
     : ${args[stop]:+${args[nothing]:?stop here at $LINENO}}
 
@@ -651,8 +686,8 @@ private::user_create(){
             username: "'$username'",
             realname: "'$user_realname'",
             ctime: (now|todate),
-            day: '$user_day',
-            gig: '$user_gig',
+            period: '$period_second',
+            traffic: '$traffic_bytes',
             uPSK: .uPSK,
             page: "'$user_profile_page'/",
             profile: "'$profile_random'"
@@ -1349,11 +1384,40 @@ private::user_get(){
     fi
 
 jq '
-(1024 * 1024 * 1024) as $one_gig |
-(1024 * 1024) as $one_meg |
-(24 * 60 * 60) as $one_day |
-(if ((.bytes.used/$one_gig)|floor) == 0 then ((.bytes.used/$one_meg|floor|tostring)+"M") else ((.bytes.used/$one_gig|floor|tostring)+"G") end) as $traffic_used |
-(if ((.bytes.pday/$one_gig)|floor) == 0 then ((.bytes.pday/$one_meg|floor|tostring)+"M") else ((.bytes.pday/$one_gig|floor|tostring)+"G") end) as $traffic_pday |
+
+(60 * 60 * 24) as $day |
+(60 * 60) as $hour |
+(60 * 1) as $minute |
+
+(1024 * 1024 * 1024) as $gig |
+(1024 * 1024) as $meg |
+(1024 * 1) as $kilo |
+
+(if (.seconds.base >= $day) then .seconds.base=((.seconds.base/$day|floor|tostring) + "d") end) |
+(if (.seconds.base >= $hour and .seconds.base < $day) then .seconds.base=((.seconds.base/$hour|floor|tostring) + "h") end) |
+(if (.seconds.base >= $minute and .seconds.base < $hour) then .seconds.base=((.seconds.base/$minute|floor|tostring) + "m") end) |
+(if (.seconds.base < $minute) then .seconds.base=((.seconds.base|tostring) + "s") end) |
+
+(if (.seconds.used >= $day) then .seconds.used=((.seconds.used/$day|floor|tostring) + "d") end) |
+(if (.seconds.used >= $hour and .seconds.used < $day) then .seconds.used=((.seconds.used/$hour|floor|tostring) + "h") end) |
+(if (.seconds.used >= $minute and .seconds.used < $hour) then .seconds.used=((.seconds.used/$minute|floor|tostring) + "m") end) |
+(if (.seconds.used < $minute) then .seconds.used=((.seconds.used|tostring) + "s") end) |
+
+(if (.bytes.base >= $gig) then .bytes.base=((.bytes.base/$gig|floor|tostring) + "g") end) |
+(if (.bytes.base >= $meg and .bytes.base < $gig) then .bytes.base=((.bytes.base/$meg|floor|tostring) + "m") end) |
+(if (.bytes.base >= $kilo and .bytes.base < $meg) then .bytes.base=((.bytes.base/$kilo|floor|tostring) + "k") end) |
+(if (.bytes.base < $kilo) then .bytes.base=((.bytes.base|tostring) + "b") end) |
+
+(if (.bytes.used >= $gig) then .bytes.used=((.bytes.used/$gig|floor|tostring) + "g") end) |
+(if (.bytes.used >= $meg and .bytes.used < $gig) then .bytes.used=((.bytes.used/$meg|floor|tostring) + "m") end) |
+(if (.bytes.used >= $kilo and .bytes.used < $meg) then .bytes.used=((.bytes.used/$kilo|floor|tostring) + "k") end) |
+(if (.bytes.used < $kilo) then .bytes.used=((.bytes.used|tostring) + "b") end) |
+
+(if (.bytes.pday >= $gig) then .bytes.pday=((.bytes.pday/$gig|floor|tostring) + "g") end) |
+(if (.bytes.pday >= $meg and .bytes.pday < $gig) then .bytes.pday=((.bytes.pday/$meg|floor|tostring) + "m") end) |
+(if (.bytes.pday >= $kilo and .bytes.pday < $meg) then .bytes.pday=((.bytes.pday/$kilo|floor|tostring) + "k") end) |
+(if (.bytes.pday < $kilo) then .bytes.pday=((.bytes.pday|tostring) + "b") end) |
+
 
 {
   user: .user,
@@ -1362,15 +1426,15 @@ jq '
   ctime: (.ctime|todate),
   atime: (.atime|todate),
   etime: (.etime|todate),
-  traffics: {
-    base: (((.bytes.base/$one_gig)|tostring) + "G"),
-    used: $traffic_used,
-    pday: $traffic_pday,
+  traffic: {
+    base: .bytes.base,
+    used: .bytes.used,
+    pday: .bytes.pday,
     limit: false
   },
-  days: {
-    base: (.seconds.base/$one_day),
-    used: (.seconds.used/$one_day)|floor,
+  period: {
+    base: .seconds.base,
+    used: .seconds.used,
     limit: false
   },
   server: {
@@ -1620,18 +1684,53 @@ private::user_page(){
     if [[ -z $user ]] && [[ -z $name ]]; then
         jq 'del(.uPSK,.profile)' $table_users/*.json | \
         jq -s '. | to_entries | .[] |
+
+            (60 * 60 * 24) as $day |
+            (60 * 60) as $hour |
+            (60 * 1) as $minute |
+            (if (.value.period >= $day) then .value.period=((.value.period/$day|floor|tostring) + "d") end) |
+            (if (.value.period >= $hour and .value.period < $day) then .value.period=((.value.period/$hour|floor|tostring) + "h") end) |
+            (if (.value.period >= $minute and .value.period < $hour) then .value.period=((.value.period/$minute|floor|tostring) + "m") end) |
+            (if (.value.period < $minute) then .value.period=((.value.period|tostring) + "s") end) |
+
+            (1024 * 1024 * 1024) as $gig |
+            (1024 * 1024) as $meg |
+            (1024 * 1) as $kilo |
+            (if (.value.traffic >= $gig) then .value.traffic=((.value.traffic/$gig|floor|tostring) + "g") end) |
+            (if (.value.traffic >= $meg and .value.traffic < $gig) then .value.traffic=((.value.traffic/$meg|floor|tostring) + "m") end) |
+            (if (.value.traffic >= $kilo and .value.traffic < $meg) then .value.traffic=((.value.traffic/$kilo|floor|tostring) + "k") end) |
+            (if (.value.traffic < $kilo) then .value.traffic=((.value.traffic|tostring) + "b") end) |
+
             {
                 index: (.key+1),
                 user: .value.username,
                 name: .value.realname,
                 ctime: .value.ctime,
-                day: .value.day,
-                gig: .value.gig,
+                period:  .value.period,
+                traffic: .value.traffic,
                 page: .value.page
             }' | jq::table true
     else
         if [[ -f $user_data_file ]]; then
-            jq 'del(.uPSK,.profile)' $user_data_file | jq::table true
+            jq 'del(.uPSK,.profile) |
+
+                (60 * 60 * 24) as $day |
+                (60 * 60) as $hour |
+                (60 * 1) as $minute |
+                (if (.period >= $day) then .period=((.period/$day|floor|tostring) + "d") end) |
+                (if (.period >= $hour and .period < $day) then .period=((.period/$hour|floor|tostring) + "h") end) |
+                (if (.period >= $minute and .period < $hour) then .period=((.period/$minute|floor|tostring) + "m") end) |
+                (if (.period < $minute) then .period=((.period|tostring) + "s") end) |
+
+                (1024 * 1024 * 1024) as $gig |
+                (1024 * 1024) as $meg |
+                (1024 * 1) as $kilo |
+                (if (.traffic >= $gig) then .traffic=((.traffic/$gig|floor|tostring) + "g") end) |
+                (if (.traffic >= $meg and .traffic < $gig) then .traffic=((.traffic/$meg|floor|tostring) + "m") end) |
+                (if (.traffic >= $kilo and .traffic < $meg) then .traffic=((.traffic/$kilo|floor|tostring) + "k") end) |
+                (if (.traffic < $kilo) then .traffic=((.traffic|tostring) + "b") end)
+
+            ' $user_data_file | jq::table true
         else
             if [[ -z $name ]]; then
                 reply_msg res="error, user=$user not found" show=true return=$ERR_FILE_NOT_FOUND
@@ -1639,18 +1738,35 @@ private::user_page(){
                 if jq --exit-status 'del(.uPSK,.profile) | select(.realname=="'$name'")' $table_users/*.json > /dev/null 2>&1; then
                     jq 'del(.uPSK,.profile) | select(.realname=="'$name'")' $table_users/*.json | \
                     jq -s '. | to_entries | .[] |
+
+                        (60 * 60 * 24) as $day |
+                        (60 * 60) as $hour |
+                        (60 * 1) as $minute |
+                        (if (.value.period >= $day) then .value.period=((.value.period/$day|floor|tostring) + "d") end) |
+                        (if (.value.period >= $hour and .value.period < $day) then .value.period=((.value.period/$hour|floor|tostring) + "h") end) |
+                        (if (.value.period >= $minute and .value.period < $hour) then .value.period=((.value.period/$minute|floor|tostring) + "m") end) |
+                        (if (.value.period < $minute) then .value.period=((.value.period|tostring) + "s") end) |
+
+                        (1024 * 1024 * 1024) as $gig |
+                        (1024 * 1024) as $meg |
+                        (1024 * 1) as $kilo |
+                        (if (.value.traffic >= $gig) then .value.traffic=((.value.traffic/$gig|floor|tostring) + "g") end) |
+                        (if (.value.traffic >= $meg and .value.traffic < $gig) then .value.traffic=((.value.traffic/$meg|floor|tostring) + "m") end) |
+                        (if (.value.traffic >= $kilo and .value.traffic < $meg) then .value.traffic=((.value.traffic/$kilo|floor|tostring) + "k") end) |
+                        (if (.value.traffic < $kilo) then .value.traffic=((.value.traffic|tostring) + "b") end) |
+
                         {
                             index: (.key+1),
                             user: .value.username,
                             name: .value.realname,
                             ctime: .value.ctime,
-                            day: .value.day,
-                            gig: .value.gig,
+                            period: .value.period,
+                            traffic: .value.traffic,
                             page: .value.page
                         }' | jq::table true
-                else
-                    reply_msg res="error, user with name=$name not found" show=true return=$ERR_FILE_NOT_FOUND
-                fi
+                    else
+                        reply_msg res="error, user with name=$name not found" show=true return=$ERR_FILE_NOT_FOUND
+                    fi
             fi
         fi
    fi
@@ -2829,11 +2945,13 @@ private::data_wipe(){
         if [[ $force == true ]]; then
             find $agent_path -type f -not -name client.sample.json -delete
             rm -fr $agent_path/${db_info[archive]}/*
+            rm -f $agent_dash/${agent_info[groupname]}.html
             find $agent_dash/* -type f -delete 2> /dev/null
             find $agent_dash/* -type d -delete 2> /dev/null
         else
             find $agent_path -type f -not -name client.sample.json
             find $agent_dash/* -type d 2> /dev/null
+            echo $agent_dash/${agent_info[groupname]}.html
             reply_msg res="warning, use force=true to wipe all" \
                 show=true return=$EXIT_SUCCESS
         fi
