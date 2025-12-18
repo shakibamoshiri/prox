@@ -2290,8 +2290,9 @@ private::server_stat(){
 }
 
 private::server_test(){
-    if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
-        curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
+    # if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
+    #     curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
+    if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users > /dev/null 2>&1; then
         printf "true\n";
     else
         printf "false\n";
@@ -3481,8 +3482,9 @@ private::app_test_server() {
 
         printf "%-${PRINTF_APP_TEST_OFFSET}s %s" "server=${server_info[location]}~" "~" | tr ' ~' '. ';
         ssm_api_addr=${server_info[api_addr]}:${server_info[api_port]}
-        if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
-            curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
+        # if nc -w3 -tzv ${server_info[api_addr]} ${server_info[api_port]} > /dev/null 2>&1; then
+        #     curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users | jq --exit-status '.' > /dev/null 2>&1
+        if curl --silent --request GET --url http://${ssm_api_addr}/server/v1/users > /dev/null 2>&1; then
             printf "passed\n";
         else
             printf "failed, ${ssm_api_addr}\n";
